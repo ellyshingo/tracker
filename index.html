@@ -115,6 +115,39 @@ label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;m
 .note{font-size:12px;color:var(--muted)}
 .banner{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 .toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;z-index:30;font-size:13px}
+.gridbox{max-height:72vh;overflow:auto}
+.gtable{min-width:0;width:auto;border-collapse:separate;border-spacing:0}
+.gtable th,.gtable td{border-bottom:1px solid var(--line);padding:6px}
+.gtable thead th{position:sticky;top:0;z-index:2;background:var(--surface-2)}
+.gtable .gs{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;min-width:190px;max-width:230px;border-right:1px solid var(--line);cursor:pointer;font-weight:500;text-transform:none;letter-spacing:0;font-size:13px;color:var(--fg)}
+.gtable .gs:hover{background:var(--surface-2)}
+.gtable .gsn{display:block;margin-bottom:3px}
+.gtable .gcorner{z-index:3;background:var(--surface-2);cursor:default;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.gh{vertical-align:bottom;min-width:86px;max-width:100px;white-space:normal;text-transform:none;letter-spacing:0;font-size:11.5px;color:var(--fg);text-align:center}
+.gh.gfirst{border-left:2px solid var(--accent)}
+.gh .gr{display:block;color:var(--accent);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;text-align:left;min-height:14px}
+.gh .gn{display:block;font-weight:600;line-height:1.25}
+.gh .gc-n{display:block;color:var(--muted);font-weight:400;font-size:11px}
+.gcell{text-align:center;background:var(--surface)}
+tbody tr:hover .gcell{background:var(--surface)}
+.st{font:inherit;font-size:11.5px;font-weight:600;border:1px solid transparent;border-radius:6px;padding:4px 6px;min-width:72px;cursor:pointer;position:relative;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.st.plan{background:var(--surface-2);color:var(--muted)}
+.st.prep{background:var(--warn-soft);color:var(--warn)}
+.st.sent{background:var(--accent-soft);color:var(--accent)}
+.st.ok{background:var(--good-soft);color:var(--good)}
+.st.wait{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.st.no{background:var(--done-soft);color:var(--done);text-decoration:line-through}
+.st.add{background:none;color:var(--line);border:1px dashed var(--line);min-width:40px}
+.st.add:hover{color:var(--accent);border-color:var(--accent)}
+.st i{position:absolute;top:-4px;right:-4px;width:9px;height:9px;border-radius:50%;background:var(--crit);border:2px solid var(--surface)}
+.st.leg{cursor:default;min-width:0;display:inline-block}
+.legend{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.hotdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--crit);vertical-align:middle;margin-left:8px}
+.menu{position:absolute;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(10,15,30,.18);padding:6px;min-width:220px;display:grid;gap:2px}
+.menu-h{padding:6px 8px 8px;font-weight:600;font-size:13px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.menu button{font:inherit;font-size:13px;text-align:left;background:none;border:0;color:var(--fg);padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.menu button:hover{background:var(--surface-2)}
+.menu button.cur{background:var(--accent-soft)}
 .picklist{display:grid;gap:2px;margin-top:12px;max-height:55vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .pick{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13.5px;cursor:pointer;grid-template-columns:none}
 .pick:last-child{border-bottom:0}
@@ -141,6 +174,7 @@ label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;m
       <button role="tab" data-tab="summary" aria-selected="true">Сводка</button>
       <button role="tab" data-tab="students" aria-selected="false">Студенты<span class="n" id="n-students"></span></button>
       <button role="tab" data-tab="apps" aria-selected="false">Заявки<span class="n" id="n-apps"></span></button>
+      <button role="tab" data-tab="grid" aria-selected="false">Статусы</button>
       <button role="tab" data-tab="unis" aria-selected="false">Вузы<span class="n" id="n-unis"></span></button>
       <button role="tab" data-tab="settings" aria-selected="false">Списки</button>
     </nav>
@@ -151,12 +185,15 @@ label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;m
 <div id="sheet-root"></div>
 
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (() => {
 const COUNTRIES=["США","Великобритания","Канада","Сингапур","Гонконг","Китай","Южная Корея","Япония","Нидерланды","Германия","Венгрия","Италия","ОАЭ","Катар","Малайзия","Турция","Другое"];
 const ROUNDS=["ED","ED2","EA","REA","RD","Rolling","UCAS","Стипендия","Другое"];
 const WORK=["Не начато","В работе","На проверке","Готово","Не нужно"];
+const CHECK=[["essay","Основное эссе"],["recs","Рекомендации"],["transcript","Транскрипт / оценки"],["tests","Результаты тестов"],["translation","Перевод документов"],["finance","Финансовые документы"]];
+const ST_SHORT={"Планируем":"План","Готовим":"Готовим","Подано":"Подано","Интервью":"Интервью","Принят":"Принят","Лист ожидания":"Лист ож.","Отказ":"Отказ","Отозвано":"Отозвано"};
+const ST_CLS={"Планируем":"plan","Готовим":"prep","Подано":"sent","Интервью":"sent","Принят":"ok","Лист ожидания":"wait","Отказ":"no","Отозвано":"no"};
 const STATUS=["Планируем","Готовим","Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"];
 const SUBMITTED=new Set(["Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"]);
 const RESULT=["—","Полная стипендия","Частичная","Без стипендии"];
@@ -168,8 +205,8 @@ const intakeIdx=v=>{const i=INTAKES.indexOf(v||"Не определено");retu
 const DEFAULT_TEACHERS=["Aziz","Dina","Saikal","Elnur","Beksultan","Umidjon"];
 
 const S={tab:"summary",students:[],apps:[],rawApps:[],unis:[],mocks:[],lists:{curators:[],teachers:DEFAULT_TEACHERS},db:null,canWrite:true,ready:{students:false,apps:false,unis:false},
-  f:{uq:"",uregion:"",ucountry:"",sq:"",sint:"",stype:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
-try{const t=localStorage.getItem("gg-tab");if(t&&["summary","students","apps","unis","settings"].includes(t))S.tab=t}catch(e){}
+  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",sq:"",sint:"",stype:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
+try{const t=localStorage.getItem("gg-tab");if(t&&["summary","students","apps","grid","unis","settings"].includes(t))S.tab=t}catch(e){}
 
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -196,17 +233,21 @@ function dueChip(a){
   return `<span class="chip ${cls}">${txt}</span>`;
 }
 function statusChip(s){if(!s)return"";const c=s==="Принят"?"good":s==="Отказ"||s==="Отозвано"?"done":SUBMITTED.has(s)?"acc":"";return `<span class="chip ${c}">${esc(s)}</span>`}
+function checkProg(s){const c=(s&&s.checklist)||{};let done=0,total=0;CHECK.forEach(([k])=>{const v=c[k]||"Не начато";if(v==="Не нужно")return;total++;if(v==="Готово")done++});return {done,total}}
+function progChip(s){if(!s)return"";const {done,total}=checkProg(s);return `<span class="chip ${total&&done===total?"good":done?"acc":""}" title="Общие документы готовы: ${done} из ${total}">${done}/${total}</span>`}
+function checkDots(s){const c=(s&&s.checklist)||{};return CHECK.map(([k,l])=>workDot(c[k],l)).join("")}
 function workDot(v,label){const c=v==="Готово"?"s3":v==="На проверке"?"s2":v==="В работе"?"s1":v==="Не нужно"?"na":"";return `<span class="dot ${c}" title="${esc(label)}: ${esc(v||"Не начато")}"></span>`}
 
 /* ---------- render ---------- */
 function render(){
+  closeMenu();
   document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===S.tab));
   $("#n-students").textContent=S.students.length||"";
   $("#n-apps").textContent=S.apps.length||"";
   $("#n-unis").textContent=S.unis.length||"";
   const m=$("#main");
   const ro=S.canWrite?"":'<div class="banner">У вас доступ только на просмотр. Чтобы вносить изменения, попросите владельца дать вам уровень Contributor или выше.</div>';
-  m.innerHTML=ro+({summary:vSummary,students:vStudents,apps:vApps,unis:vUnis,settings:vSettings}[S.tab]||vSummary)();
+  m.innerHTML=ro+({summary:vSummary,students:vStudents,apps:vApps,grid:vGrid,unis:vUnis,settings:vSettings}[S.tab]||vSummary)();
   bindView();
 }
 
@@ -223,7 +264,7 @@ function vSummary(){
     [d7.length,"дедлайнов ≤ 7 дней",d7.length>0],[admitted.length,"поступлений"],[admitted.filter(a=>a.result==="Полная стипендия").length,"с полной стипендией"]
   ].map(([v,l,al])=>`<div class="tile${al?" alert":""}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   const upcoming=open.filter(a=>{const d=daysLeft(a.deadline);return d!=null&&d>=0}).sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,10);
-  const upHtml=upcoming.length?upcoming.map(a=>`<div class="li" data-open-app="${esc(a.id)}"><div class="t"><div><b>${esc(studentName(a.studentId))}</b> · ${esc(a.uni||"вуз не указан")}</div><div class="sub">${esc([a.country,a.round,fmtDate(a.deadline)].filter(Boolean).join(" · "))}</div></div><div class="dots">${workDot(a.essay,"Основное эссе")}${workDot(a.supp,"Доп. эссе")}${workDot(a.recs,"Рекомендации")}${workDot(a.docs,"Документы")}</div>${dueChip(a)}</div>`).join("")
+  const upHtml=upcoming.length?upcoming.map(a=>`<div class="li" data-open-app="${esc(a.id)}"><div class="t"><div><b>${esc(studentName(a.studentId))}</b> · ${esc(a.uni||"вуз не указан")}</div><div class="sub">${esc([a.country,a.round,fmtDate(a.deadline)].filter(Boolean).join(" · "))}</div></div>${progChip(studentOf(a.studentId))}${dueChip(a)}</div>`).join("")
     :`<div class="empty"><b>Ближайших дедлайнов нет</b>Добавьте заявки во вкладке «Заявки» — здесь появятся 10 ближайших.</div>`;
   const cur={};adm.forEach(s=>{const k=s.curator||"Без куратора";cur[k]=(cur[k]||0)+1});
   const max=Math.max(1,...Object.values(cur));
@@ -236,7 +277,7 @@ function vSummary(){
   return `<div class="tiles">${tiles}</div>
   <div class="cols">
     <section><h2>Ближайшие дедлайны${d21.length?` <span class="sub">· ${d21.length} в ближайшие 3 недели</span>`:""}</h2><div class="list">${upHtml}</div>
-      <p class="note">Кружки: основное эссе · доп. эссе · рекомендации · документы. Синий контур — на проверке, заливка — готово.</p></section>
+      <p class="note">Дробь — сколько общих документов студента готово (эссе, рекомендации, транскрипт и т.д.).</p></section>
     <section><h2>Студенты по сезону поступления</h2><div class="list">${intHtml}</div>
       <h2 style="margin-top:20px">Нагрузка кураторов</h2><div class="list">${curHtml}</div>
       <h2 style="margin-top:20px">Поступающие без заявок</h2><div class="list">${noAppsHtml}</div></section>
@@ -251,14 +292,14 @@ function vStudents(){
   const body=rows.map(s=>{const n=S.apps.filter(a=>a.studentId===s.id).length;
     const g=s.intake||"Не определено";let head="";
     if(g!==grp){grp=g;const cnt=rows.filter(x=>(x.intake||"Не определено")===g).length;head=`<tr class="grp"><td colspan="9">${esc(g)} <span class="sub">· ${cnt}</span></td></tr>`}
-    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b><div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type?`<div><span class="chip ${s.type==="Курсы"?"":"acc"}">${esc(s.type)}</span></div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td>
+    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b><div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type?`<div><span class="chip ${s.type==="Курсы"?"":"acc"}">${esc(s.type)}</span></div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}</td>
     <td class="num">${esc(s.ielts||"")}${s.toefl?`<div class="sub">TOEFL ${esc(s.toefl)}</div>`:""}</td><td class="num">${esc(s.sat||"")}</td><td class="num">${esc(s.ort||"")}</td><td class="num">${n||""}</td><td class="sub">${esc(s.countries||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-sq" placeholder="Поиск: имя, специальность, страна" value="${esc(f.sq)}">
     <select id="f-sint"><option value="">Все сезоны</option>${opts(INTAKES,f.sint,false)}</select>
     <select id="f-stype"><option value="">Все типы</option>${opts(STYPE,f.stype,false)}</select>
     <select id="f-scur"><option value="">Все кураторы</option>${opts(S.lists.curators,f.scur,false)}</select>
     ${S.canWrite?'<button class="btn primary" id="add-student">+ Студент</button>':""}</div>
-    <div class="tablebox">${S.students.length?`<table><thead><tr><th>Студент</th><th>Класс / тип</th><th>Куратор</th><th class="num">IELTS</th><th class="num">SAT</th><th class="num">ОРТ</th><th class="num">Заявок</th><th>Страны</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="empty">Никто не подходит под фильтр.</td></tr>'}</tbody></table>`
+    <div class="tablebox">${S.students.length?`<table><thead><tr><th>Студент</th><th>Класс / тип</th><th>Куратор</th><th>Документы</th><th class="num">IELTS</th><th class="num">SAT</th><th class="num">ОРТ</th><th class="num">Заявок</th><th>Страны</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="empty">Никто не подходит под фильтр.</td></tr>'}</tbody></table>`
       :`<div class="empty"><b>${S.ready.students?"Студентов пока нет":"Загружаю студентов…"}</b>${S.ready.students?"Нажмите «+ Студент», чтобы добавить первого.":""}</div>`}</div>`;
 }
 
@@ -268,12 +309,12 @@ function vApps(){
     .sort((a,b)=>{const pa=SUBMITTED.has(a.status)||daysLeft(a.deadline)<0?1:0,pb=SUBMITTED.has(b.status)||daysLeft(b.deadline)<0?1:0;if(pa!==pb)return pa-pb;return(a.deadline||"9999").localeCompare(b.deadline||"9999")});
   const body=rows.map(a=>{const s=studentOf(a.studentId)||{};const past=SUBMITTED.has(a.status)||daysLeft(a.deadline)<0;
     return `<tr data-open-app="${esc(a.id)}" class="${past?"past":""}"><td><b>${esc(s.name||"—")}</b><div class="sub">${esc(s.curator||"")}</div></td><td>${esc(a.uni||"")}<div class="sub">${esc(a.program||"")}</div></td><td>${esc(a.country||"")}</td><td>${esc(a.round||"")}</td><td class="num">${fmtDate(a.deadline)}</td><td>${dueChip(a)}</td>
-    <td><div class="dots">${workDot(a.essay,"Основное эссе")}${workDot(a.supp,"Доп. эссе")}${workDot(a.recs,"Рекомендации")}${workDot(a.docs,"Документы")}</div></td><td>${statusChip(a.status)}${a.result&&a.result!=="—"?`<div class="sub">${esc(a.result)}${a.amount?` · $${Number(a.amount).toLocaleString("ru")}`:""}</div>`:""}</td></tr>`}).join("");
+    <td><div class="dots">${workDot(a.supp,"Доп. эссе")}</div></td><td>${progChip(s)}</td><td>${statusChip(a.status)}${a.result&&a.result!=="—"?`<div class="sub">${esc(a.result)}${a.amount?` · $${Number(a.amount).toLocaleString("ru")}`:""}</div>`:""}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-aq" placeholder="Поиск: студент, вуз, программа" value="${esc(f.aq)}">
     <select id="f-astat"><option value="">Все статусы</option><option value="__open"${f.astat==="__open"?" selected":""}>Ещё не подано</option>${opts(STATUS,f.astat==="__open"?"":f.astat,false)}</select>
     <select id="f-acur"><option value="">Все кураторы</option>${opts(S.lists.curators,f.acur,false)}</select>
     ${S.canWrite?`<button class="btn primary" id="add-app"${S.students.length?"":" disabled"}>+ Вузы студенту</button>`:""}</div>
-    <div class="tablebox">${S.apps.length?`<table><thead><tr><th>Студент</th><th>Вуз / программа</th><th>Страна</th><th>Тип</th><th class="num">Дедлайн</th><th>Осталось</th><th>Эссе · рек. · док.</th><th>Статус</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="empty">Ничего не подходит под фильтр.</td></tr>'}</tbody></table>`
+    <div class="tablebox">${S.apps.length?`<table><thead><tr><th>Студент</th><th>Вуз / программа</th><th>Страна</th><th>Тип</th><th class="num">Дедлайн</th><th>Осталось</th><th>Доп. эссе</th><th>Общие док.</th><th>Статус</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="empty">Ничего не подходит под фильтр.</td></tr>'}</tbody></table>`
     :`<div class="empty"><b>${S.ready.apps?"Заявок пока нет":"Загружаю заявки…"}</b>${S.ready.apps?"Сначала внесите вузы во вкладке «Вузы», затем добавляйте их студентам галочками — кнопка «+ Вузы студенту».":""}</div>`}</div>
     <p class="note">Красный — до дедлайна 7 дней или меньше, жёлтый — до 21 дня. Поданные и просроченные уходят вниз.</p>`;
 }
@@ -315,6 +356,8 @@ function studentSheet(id){
     <label>Год выпуска школы<input id="s-grad" inputmode="numeric" value="${esc(s.gradYear)}"></label>
     <label class="full">Направление (специальность)<input id="s-major" value="${esc(s.major)}"></label>
     <label class="full">Целевые страны<input id="s-countries" value="${esc(s.countries)}"></label>
+    <div class="sec">Общие документы (одни на все вузы)</div>
+    ${CHECK.map(([k,l])=>`<label>${l}<select id="c-${k}">${opts(WORK,((s.checklist||{})[k])||"Не начато",false)}</select></label>`).join("")}
     <div class="sec">Баллы</div>
     <label>IELTS<input id="s-ielts" inputmode="decimal" value="${esc(s.ielts)}"></label>
     <label>TOEFL<input id="s-toefl" inputmode="numeric" value="${esc(s.toefl)}"></label>
@@ -335,7 +378,7 @@ function studentSheet(id){
     if(!S.canWrite)return;
     $("#save").onclick=async()=>{
       const name=val("s-name");if(!name){$("#s-name").focus();toast("Впишите ФИО");return}
-      const data={name,grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
+      const data={name,checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
         ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),parent:val("s-parent"),notes:val("s-notes"),updatedAt:new Date().toISOString()};
       await save("students",id,data,s);closeSheet();
     };
@@ -354,12 +397,9 @@ function appSheet(id){
     <label>Статус заявки<select id="a-status">${opts(STATUS,a.status,false)}</select></label>
     <label class="full">Свой дедлайн (если отличается от каталога)<input type="date" id="a-deadline" value="${esc(a.deadlineOverride||"")}"></label>
     <p class="full note" id="a-dl"></p>
-    <div class="sec">Документы</div>
-    <label>Основное эссе<select id="a-essay">${opts(WORK,a.essay||"Не начато",false)}</select></label>
+    <div class="sec">Для этого вуза</div>
     <label>Доп. эссе<select id="a-supp">${opts(WORK,a.supp||"Не начато",false)}</select></label>
-    <label>Рекомендации<select id="a-recs">${opts(WORK,a.recs||"Не начато",false)}</select></label>
-    <label>Документы / переводы<select id="a-docs">${opts(WORK,a.docs||"Не начато",false)}</select></label>
-    <label>Баллы отправлены<select id="a-scores">${opts(["Нет","Да","Не нужно"],a.scores||"Нет",false)}</select></label>
+    <p class="full note">Общие документы студента (эссе, рекомендации, транскрипт…) отмечаются один раз в его карточке: сейчас готово ${checkProg(studentOf(a.studentId)).done} из ${checkProg(studentOf(a.studentId)).total}.</p>
     <div class="sec">Результат</div>
     <label>Результат / стипендия<select id="a-result">${opts(RESULT,a.result||"—",false)}</select></label>
     <label>Сумма стипендии, $ в год<input id="a-amount" inputmode="numeric" value="${esc(a.amount)}"></label>
@@ -371,7 +411,7 @@ function appSheet(id){
     $("#cancel").onclick=closeSheet;if(!S.canWrite)return;
     $("#save").onclick=async()=>{
       const data={uniId:val("a-uniid"),program:val("a-prog"),round:val("a-round"),deadlineOverride:val("a-deadline"),status:val("a-status"),
-        essay:val("a-essay"),supp:val("a-supp"),recs:val("a-recs"),docs:val("a-docs"),scores:val("a-scores"),result:val("a-result"),amount:val("a-amount"),notes:val("a-notes"),updatedAt:new Date().toISOString()};
+        supp:val("a-supp"),result:val("a-result"),amount:val("a-amount"),notes:val("a-notes"),updatedAt:new Date().toISOString()};
       await save("apps",id,data,a);closeSheet();
     };
     delBtn(async()=>{await remove("apps",id);closeSheet()});
@@ -409,13 +449,70 @@ function pickUnis(studentId){
       const sid=val("p-stud");if(!sid){toast("Выберите студента");return}if(!sel.size){toast("Отметьте вузы");return}if(!S.db)return toast("Нет связи с хранилищем");
       const btn=$("#p-go");btn.disabled=true;let n=0;const pref=val("p-round");
       try{for(const uid of sel){const u=uniOf(uid);if(!u)continue;btn.textContent=`Добавляю ${++n}/${sel.size}…`;
-        await S.db.collection("apps").add({studentId:sid,uniId:uid,round:defaultRound(u,pref),status:"Планируем",essay:"Не начато",supp:"Не начато",recs:"Не начато",docs:"Не начато",scores:"Нет",result:"—",createdAt:new Date().toISOString()})}
+        await S.db.collection("apps").add({studentId:sid,uniId:uid,round:defaultRound(u,pref),status:"Планируем",supp:"Не начато",result:"—",createdAt:new Date().toISOString()})}
         toast(`Добавлено вузов: ${n}`);await reload("apps");closeSheet();studentSheet(sid)}catch(e){fail(e);btn.disabled=false;draw()}
     };
   });
 }
 
 function dlSummary(u){const d=u.deadlines||{};return ROUNDS.filter(r=>d[r]).map(r=>`${r} ${fmtDate(d[r]).slice(0,5)}`).join(" · ")}
+
+function vGrid(){
+  const f=S.f;
+  const studs=S.students.filter(s=>(!f.gint||(s.intake||"Не определено")===f.gint)&&(!f.gcur||(s.curator||"")===f.gcur));
+  const ids=new Set(studs.map(s=>s.id));
+  const apps=S.apps.filter(a=>ids.has(a.studentId)&&(!f.gregion||regionOf(uniOf(a.uniId))===f.gregion));
+  const withApps=studs.filter(s=>apps.some(a=>a.studentId===s.id)).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ru"));
+  const noApps=studs.length-withApps.length;
+  const cols=[...new Set(apps.map(a=>a.uniId))].map(uniOf).filter(Boolean).sort(uniSort);
+  const key={};apps.forEach(a=>{key[a.studentId+"|"+a.uniId]=a});
+  const short=n=>{n=n.replace(/^University of /,"U of ").replace(/ (University|College)\b/,"").replace(/ \(.*\)$/,"");return n.length>16?n.slice(0,15)+"…":n};
+  let grp=null;
+  const head=cols.map(u=>{const g=regionOf(u);const first=g!==grp;grp=g;const n=apps.filter(a=>a.uniId===u.id).length;
+    return `<th class="gh${first?" gfirst":""}" title="${esc(u.name)} · ${esc(u.country||"")}"><span class="gr">${first?esc(g):"&nbsp;"}</span><span class="gn">${esc(short(u.name))}</span><span class="gc-n">${n}</span></th>`}).join("");
+  const body=withApps.map(s=>`<tr><th class="gs" data-open-student="${esc(s.id)}"><span class="gsn">${esc(s.name)}</span>${progChip(s)}</th>${cols.map(u=>{const a=key[s.id+"|"+u.id];
+    if(!a)return `<td class="gcell">${S.canWrite?`<button class="st add" data-add="${esc(s.id)}|${esc(u.id)}" title="Добавить ${esc(u.name)}">+</button>`:""}</td>`;
+    const d=daysLeft(a.deadline);const hot=!SUBMITTED.has(a.status)&&d!=null&&d>=0&&d<=7;
+    return `<td class="gcell"><button class="st ${ST_CLS[a.status]||"plan"}" data-cell="${esc(a.id)}" title="${esc(u.name)} · ${esc(a.status||"")}${a.round?" · "+esc(a.round):""}${a.deadline?" · дедлайн "+fmtDate(a.deadline):""}">${esc(ST_SHORT[a.status]||a.status||"—")}${hot?"<i></i>":""}</button></td>`}).join("")}</tr>`).join("");
+  const table=withApps.length?`<div class="tablebox gridbox"><table class="gtable"><thead><tr><th class="gs gcorner">Студент · док.</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+    :`<div class="tablebox"><div class="empty"><b>${S.ready.apps?"Здесь пока пусто":"Загружаю…"}</b>${S.ready.apps?"Добавьте вузы студентам: карточка студента → «+ Добавить вузы». Потом статусы можно менять здесь одним кликом.":""}</div></div>`;
+  const legend=STATUS.map(st=>`<span class="st ${ST_CLS[st]} leg">${esc(ST_SHORT[st])}</span>`).join("");
+  return `<div class="toolbar">
+    <select id="f-gint"><option value="">Все сезоны</option>${opts(INTAKES,f.gint,false)}</select>
+    <select id="f-gcur"><option value="">Все кураторы</option>${opts(S.lists.curators,f.gcur,false)}</select>
+    <select id="f-gregion"><option value="">Все регионы</option>${opts(REGIONS,f.gregion,false)}</select>
+    <span class="sub">${withApps.length} студ. × ${cols.length} вузов${noApps?` · без вузов: ${noApps}`:""}</span>
+    ${S.canWrite?`<button class="btn" id="add-app"${S.students.length?"":" disabled"} style="margin-left:auto">+ Вузы студенту</button>`:""}</div>
+    ${table}
+    <div class="legend">${legend}<span class="sub"><span class="hotdot"></span> дедлайн через 7 дней или меньше</span></div>
+    <p class="note">Нажмите на клетку, чтобы сменить статус. «+» — добавить этот вуз студенту. Имя студента открывает его карточку, дробь — готовые общие документы.</p>`;
+}
+
+function statusMenu(btn){
+  closeMenu();
+  const id=btn.dataset.cell;const a=S.apps.find(x=>x.id===id);if(!a)return;
+  const m=document.createElement("div");m.className="menu";m.id="st-menu";
+  m.innerHTML=`<div class="menu-h">${esc(studentName(a.studentId))}<br><span class="sub">${esc(a.uni||"")}${a.deadline?" · "+fmtDate(a.deadline):""}</span></div>`+
+    (S.canWrite?STATUS.map(st=>`<button data-st="${esc(st)}"${st===a.status?' class="cur"':""}><span class="st ${ST_CLS[st]} leg">${esc(ST_SHORT[st])}</span> ${esc(st)}</button>`).join(""):"")+
+    `<button data-open="1">Открыть заявку…</button>`;
+  document.body.appendChild(m);
+  const r=btn.getBoundingClientRect();const w=m.offsetWidth,h=m.offsetHeight;
+  let x=r.left+window.scrollX,y=r.bottom+window.scrollY+4;
+  if(x+w>window.scrollX+document.documentElement.clientWidth-8)x=window.scrollX+document.documentElement.clientWidth-w-8;
+  if(r.bottom+h>window.innerHeight-8)y=r.top+window.scrollY-h-4;
+  m.style.left=Math.max(8,x)+"px";m.style.top=Math.max(8,y)+"px";
+  m.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{closeMenu();if(b.dataset.st===a.status)return;try{await S.db.doc("apps/"+id).update({status:b.dataset.st,updatedAt:new Date().toISOString()});await reload("apps")}catch(e){fail(e)}});
+  m.querySelector("[data-open]").onclick=()=>{closeMenu();appSheet(id)};
+  setTimeout(()=>document.addEventListener("click",outside),0);
+}
+function outside(e){const m=$("#st-menu");if(m&&!m.contains(e.target))closeMenu()}
+function closeMenu(){const m=$("#st-menu");if(m)m.remove();document.removeEventListener("click",outside)}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMenu()});
+
+async function quickAdd(sid,uid){
+  const u=uniOf(uid);if(!u||!S.db)return;
+  try{await S.db.collection("apps").add({studentId:sid,uniId:uid,round:defaultRound(u,"auto"),status:"Планируем",supp:"Не начато",result:"—",createdAt:new Date().toISOString()});await reload("apps");toast(`${u.name} добавлен`)}catch(e){fail(e)}
+}
 
 function vUnis(){
   const f=S.f;const q=f.uq.trim().toLowerCase();
@@ -485,10 +582,12 @@ function bindView(){
   const on=(sel,ev,fn)=>{const el=$(sel);el&&el.addEventListener(ev,fn)};
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
   on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
-  [["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{S.f[k]=e.target.value;render()}));
+  [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{S.f[k]=e.target.value;render()}));
   on("#add-student","click",()=>studentSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
   document.querySelectorAll("#main [data-open-student]").forEach(el=>el.addEventListener("click",()=>studentSheet(el.dataset.openStudent)));
+  document.querySelectorAll("#main [data-cell]").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();statusMenu(el)}));
+  document.querySelectorAll("#main [data-add]").forEach(el=>el.addEventListener("click",()=>{const [sid,uid]=el.dataset.add.split("|");el.disabled=true;quickAdd(sid,uid)}));
   document.querySelectorAll("#main [data-open-uni]").forEach(el=>el.addEventListener("click",()=>uniSheet(el.dataset.openUni)));
   document.querySelectorAll("#main [data-open-app]").forEach(el=>el.addEventListener("click",()=>appSheet(el.dataset.openApp)));
   on("#save-lists","click",async()=>{
@@ -504,7 +603,7 @@ document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",
 const TABLES={students:"tracker_students",unis:"tracker_universities",apps:"tracker_applications"};
 const FIELD={gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
-  students:["name","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
+  students:["name","checklist","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
   unis:["name","country","link","deadlines","reqs","notes","created_at","updated_at"],
   apps:["student_id","uni_id","program","round","deadline_override","status","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"]};
 const UNFIELD=Object.fromEntries(Object.entries(FIELD).map(([a,b])=>[b,a]));
@@ -547,9 +646,15 @@ function loginScreen(msg){
   $("#main").innerHTML=`<div class="login"><h2>Вход в трекер</h2><p class="note">${msg||"Войдите под рабочим email. Доступ выдаёт администратор центра."}</p>
     <form id="login-form" class="grid" style="grid-template-columns:1fr"><label>Email<input id="l-email" type="email" autocomplete="username" required></label>
     <label>Пароль<input id="l-pass" type="password" autocomplete="current-password" required></label>
-    <div class="actions"><button class="btn primary" type="submit">Войти</button><button class="btn" type="button" id="l-reset">Забыли пароль?</button></div></form></div>`;
+    <p class="note" id="l-err" hidden style="color:var(--crit)"></p><div class="actions"><button class="btn primary" type="submit">Войти</button><button class="btn" type="button" id="l-reset">Забыли пароль?</button></div></form></div>`;
   $("#tabs").hidden=true;
-  $("#login-form").addEventListener("submit",async e=>{e.preventDefault();const {error}=await SB.auth.signInWithPassword({email:val("l-email"),password:$("#l-pass").value});if(error)toast("Неверный email или пароль")});
+  $("#login-form").addEventListener("submit",async e=>{e.preventDefault();let error;try{({error}=await SB.auth.signInWithPassword({email:val("l-email").toLowerCase(),password:$("#l-pass").value}))}catch(e){error=e}
+    if(error){const m=String(error.message||error);const box=$("#l-err");
+      box.textContent=/invalid login credentials/i.test(m)?"Supabase не нашёл такую пару email + пароль. Проверьте пользователя в Authentication → Users или создайте его заново.":
+        /email not confirmed/i.test(m)?"Email не подтверждён. В Supabase удалите пользователя и создайте заново с галочкой Auto Confirm User.":
+        /invalid api key|no api key|apikey|jwt|unauthorized/i.test(m)?"Неверный ключ в config.js. Скопируйте anon public key заново (шаг 5) и перезагрузите config.js в GitHub.":
+        /failed to fetch|networkerror|load failed/i.test(m)?"Сайт не может связаться с Supabase. Проверьте адрес SUPABASE_URL в config.js (шаг 5).":
+        "Ошибка входа: "+m;box.hidden=false}});
   $("#l-reset").onclick=async()=>{const email=val("l-email");if(!email){toast("Впишите email");return}const {error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href.split("#")[0]});toast(error?"Не получилось отправить письмо":"Письмо для сброса пароля отправлено")};
 }
 
