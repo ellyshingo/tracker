@@ -252,7 +252,7 @@ const studentName=id=>(S.students.find(s=>s.id===id)||{}).name||"—";
 const studentOf=id=>S.students.find(s=>s.id===id);
 const uniOf=id=>S.unis.find(u=>u.id===id);
 const REGIONS=["США","Европа","Азия","Другое"];
-const REGION_OF={"США":"США","Великобритания":"Европа","Нидерланды":"Европа","Германия":"Европа","Венгрия":"Европа","Италия":"Европа","Турция":"Европа","Сингапур":"Азия","Гонконг":"Азия","Китай":"Азия","Южная Корея":"Азия","Япония":"Азия","Малайзия":"Азия","ОАЭ":"Азия","Катар":"Азия"};
+const REGION_OF={"США":"США","Великобритания":"Европа","Нидерланды":"Европа","Германия":"Европа","Венгрия":"Европа","Италия":"Европа","Турция":"Европа","Канада":"Другое","Сингапур":"Азия","Гонконг":"Азия","Китай":"Азия","Южная Корея":"Азия","Япония":"Азия","Малайзия":"Азия","ОАЭ":"Азия","Катар":"Азия"};
 const regionOf=u=>REGION_OF[(u&&u.country)||""]||"Другое";
 const uniSort=(a,b)=>REGIONS.indexOf(regionOf(a))-REGIONS.indexOf(regionOf(b))||(a.country||"").localeCompare(b.country||"","ru")||(a.name||"").localeCompare(b.name||"","ru");
 function resolveApps(){S.apps=S.rawApps.map(a=>{const u=uniOf(a.uniId);const cat=u&&u.deadlines&&a.round?u.deadlines[a.round]:"";return {...a,uni:u?u.name:(a.uni||"вуз удалён"),country:u?u.country:(a.country||""),deadline:a.deadlineOverride||cat||a.deadline||""}})}
@@ -394,6 +394,7 @@ const TESTS={
   "ACT":{secs:[],min:1,max:36,step:1},
   "Другое":{secs:[]}
 };
+const secEntries=t=>{const o=t.sections||{},order=(TESTS[t.test]||{}).secs||[];return Object.entries(o).filter(([k,v])=>v!==""&&v!=null).sort((a,b)=>{const i=order.indexOf(a[0]),j=order.indexOf(b[0]);return (i<0?99:i)-(j<0?99:j)})};
 const TEST_FIELD={"IELTS":"ielts","SAT":"sat","TOEFL":"toefl","ОРТ":"ort"};
 const TIERS=["High Reach","Reach","Target","Safety","Гос. стипендия"];
 const TIER_DEFAULT={"High Reach":"High Reach","Reach":"Reach","Target":"Target","Safety":"Safety","Гос. стипендия":"Государственные стипендии"};
@@ -504,7 +505,7 @@ function cTests(s){
   const charts=used.map(t=>testChart(s.id,t)).join("");
   return `${charts?`<div class="charts">${charts}</div>`:""}
   <div class="sec">Попытки</div>
-  ${ts.length?`<div class="tablebox"><table class="mini"><thead><tr><th>Дата</th><th>Тест</th><th>Тип</th><th>Секции</th><th class="num">Итог</th><th>Комментарий</th></tr></thead><tbody>${ts.map(t=>`<tr data-test="${esc(t.id)}"><td class="num">${fmtDate(t.date)}</td><td>${esc(t.test)}</td><td>${t.kind==="Официальный"?'<span class="chip good">офиц.</span>':'<span class="chip">пробный</span>'}</td><td class="sub">${esc(Object.entries(t.sections||{}).filter(([k,v])=>v!==""&&v!=null).map(([k,v])=>k.split(" ")[0]+" "+v).join(" · "))}</td><td class="num"><b>${esc(fmtScore(t.test,num(t.total))||t.total||"")}</b></td><td class="sub">${esc(t.comment||"")}</td></tr>`).join("")}</tbody></table></div>`:'<p class="note">Попыток пока нет. Добавьте пробный или официальный тест ниже.</p>'}
+  ${ts.length?`<div class="tablebox"><table class="mini"><thead><tr><th>Дата</th><th>Тест</th><th>Тип</th><th>Секции</th><th class="num">Итог</th><th>Комментарий</th></tr></thead><tbody>${ts.map(t=>`<tr data-test="${esc(t.id)}"><td class="num">${fmtDate(t.date)}</td><td>${esc(t.test)}</td><td>${t.kind==="Официальный"?'<span class="chip good">офиц.</span>':'<span class="chip">пробный</span>'}</td><td class="sub">${esc(secEntries(t).map(([k,v])=>k.split(" ")[0]+" "+v).join(" · "))}</td><td class="num"><b>${esc(fmtScore(t.test,num(t.total))||t.total||"")}</b></td><td class="sub">${esc(t.comment||"")}</td></tr>`).join("")}</tbody></table></div>`:'<p class="note">Попыток пока нет. Добавьте пробный или официальный тест ниже.</p>'}
   ${S.canWrite?`<div class="panel" id="t-panel"><div class="panel-h" id="t-title">Новая попытка</div><div id="t-formwrap">${testForm({})}</div>
     <div class="actions"><button class="btn danger" id="t-del" hidden>Удалить</button><span class="sp"></span><button class="btn" id="t-reset" hidden>Отмена</button><button class="btn primary" id="t-save">Добавить</button></div></div>`:""}
   <div class="sec">Цели по тестам</div>
@@ -581,14 +582,55 @@ function bTasks(s){
   $("#k-del").onclick=async()=>{const b=$("#k-del");if(!b.classList.contains("armed")){b.classList.add("armed");b.textContent="Точно удалить?";return}try{await S.db.doc("tasks/"+editing).delete();await refreshCard("tasks")}catch(e){fail(e)}};
 }
 
+/* --- university groups (shared by card and report) --- */
+const bySort=(x,y)=>((x.sort??1e9)-(y.sort??1e9))||(x.deadline||"9999").localeCompare(y.deadline||"9999")||(x.uni||"").localeCompare(y.uni||"");
+function uniGroups(s){
+  const apps=S.apps.filter(a=>a.studentId===s.id);
+  if(apps.some(a=>a.grp)){
+    const names=[];apps.filter(a=>a.grp).sort(bySort).forEach(a=>{if(!names.includes(a.grp))names.push(a.grp)});
+    const g=names.map(n=>({key:n,title:n,mode:"grp",list:apps.filter(a=>a.grp===n).sort(bySort)}));
+    const rest=apps.filter(a=>!a.grp).sort(bySort);if(rest.length)g.push({key:"",title:"Другие вузы",mode:"grp",list:rest,other:true});
+    return g;
+  }
+  const titles=s.tierTitles||{};
+  return [...TIERS,""].map(t=>({key:t,tier:t,title:t?(titles[t]||TIER_DEFAULT[t]):"Другие вузы",mode:"tier",list:apps.filter(a=>(a.tier||"")===t).sort(bySort),other:!t}));
+}
+const aField=(a,u,f)=>a[f]||u[f]||"";
+const fmtRating=v=>String(v||"").replace(/^QS\s+/,"");
+function aidHTML(x,note){x=String(x||"");let h;
+  if(x.includes("\n")){const [f,...r]=x.split("\n");h=`<b>${esc(f)}</b>${r.length?"<br>"+esc(r.join("\n")).replace(/\n/g,"<br>"):""}`}
+  else{const m=x.match(/^(.{3,90}?[.:])\s+(.+)$/s);h=m?`<b>${esc(m[1])}</b> ${esc(m[2])}`:esc(x)}
+  return h+(note?`${x?"<br>":""}<i>${esc(note)}</i>`:"")}
+function groupTable(s,grp,T){
+  const l=grp.list;const U=a=>uniOf(a.uniId)||{};
+  const has=(fn)=>{const c=l.filter(a=>fn(a)).length;return c>=Math.min(2,l.length)};
+  const ratingOf=a=>fmtRating(aField(a,U(a),"rating"));
+  const countries=new Set(l.map(a=>U(a).country||""));
+  const cols=[];
+  const gov=grp.mode==="tier"&&grp.tier==="Гос. стипендия";
+  const g2=grp.mode==="grp";const vis=(f)=>g2?has(a=>a[f]):has(a=>aField(a,U(a),f));
+  const showRating=!gov&&(g2?has(a=>a.rating&&a.rating!=="—")||has(a=>a.rating):has(a=>ratingOf(a)&&ratingOf(a)!=="—"));
+  const showCountry=gov||(countries.size>1&&!showRating&&!has(a=>a.satRange)&&!vis("reqs"));
+  if(showCountry)cols.push(["Страна",a=>`<b>${esc(U(a).country||"")}</b>`]);
+  cols.push([gov?"Программа":"Университет",a=>`<b>${esc(a.uni)}</b>`]);
+  if(showRating){const allNum=l.every(a=>!ratingOf(a)||/^[\d—–-]+$/.test(ratingOf(a)));cols.push([allNum?"QS":"Рейтинг",a=>esc(ratingOf(a)||"—")])}
+  if(has(a=>a.satRange))cols.push(["SAT",a=>esc(a.satRange||"—")]);
+  if(vis("reqs"))cols.push(["Требования",a=>esc(aField(a,U(a),"reqs"))]);
+  if(has(a=>a.program))cols.push(["Программы",a=>esc(a.program||"").replace(/\n/g,"<br>")]);
+  if(grp.mode==="grp"&&(s.reportOpts||{}).showTier)cols.push(["Приоритет",a=>`<b>${esc(a.tier||"")}</b>`]);
+  cols.push(["Дедлайн подачи",a=>esc(a.deadlineText||U(a).deadlineText||dlSummary(U(a))||(a.deadline?fmtDate(a.deadline):"")).replace(/\n/g,"<br>")]);
+  if(g2?(has(a=>a.aid)||l.some(a=>a.note)):l.some(a=>aField(a,U(a),"aid")||a.note))cols.push(["Финансовая поддержка",a=>aidHTML(aField(a,U(a),"aid"),a.note)]);
+  return T(cols.map(c=>c[0]),l.map(a=>`<tr>${cols.map(c=>`<td>${c[1](a)}</td>`).join("")}</tr>`));
+}
+
 /* --- universities in card --- */
 function cUnis(s){
-  const apps=S.apps.filter(a=>a.studentId===s.id);const titles=s.tierTitles||{};
-  const groups=[...TIERS,""].map(t=>[t,apps.filter(a=>(a.tier||"")===t).sort((x,y)=>(x.deadline||"9999").localeCompare(y.deadline||"9999"))]).filter(([t,l])=>l.length||t);
-  return `<div class="toolbar">${S.canWrite?'<button class="btn primary" id="s-addunis" type="button">+ Добавить вузы</button>':""}<span class="sub">${apps.length} вузов · рейтинг, дедлайны и финансирование берутся из каталога</span></div>
+  const apps=S.apps.filter(a=>a.studentId===s.id);const titles=s.tierTitles||{};const groups=uniGroups(s).filter(g=>g.list.length||g.mode==="tier"&&g.tier);
+  const grpMode=groups.some(g=>g.mode==="grp");
+  return `<div class="toolbar">${S.canWrite?'<button class="btn primary" id="s-addunis" type="button">+ Добавить вузы</button>':""}<span class="sub">${apps.length} вузов · ${grpMode?"группы как в отчёте; группу и порядок вуза можно поменять в его заявке":"рейтинг, дедлайны и финансирование берутся из каталога"}</span></div>
   <fieldset class="fs"${ro()}><label>Примечание к списку вузов (курсивом в отчёте)<textarea id="u-note" style="min-height:52px">${esc(s.unisNote)}</textarea></label>
-  ${groups.map(([t,l])=>`<div class="tier"><div class="tier-h">${t?`<input class="tier-t" data-tier="${esc(t)}" value="${esc(titles[t]||"")}" placeholder="${esc(TIER_DEFAULT[t])}">`:'<b>Без категории</b> <span class="sub">— выберите категорию, чтобы вуз попал в отчёт в нужную группу</span>'}</div>
-    ${l.length?`<div class="list">${l.map(a=>{const u=uniOf(a.uniId)||{};return `<div class="li"><div class="t" data-open-app="${esc(a.id)}"><b>${esc(a.uni)}</b> <span class="sub">${esc([u.rating,a.round,a.deadline&&fmtDate(a.deadline)].filter(Boolean).join(" · "))}</span></div>
+  ${groups.map(g=>`<div class="tier"><div class="tier-h">${g.mode==="tier"&&g.tier?`<input class="tier-t" data-tier="${esc(g.tier)}" value="${esc(titles[g.tier]||"")}" placeholder="${esc(TIER_DEFAULT[g.tier])}">`:g.other?'<b>Без группы</b> <span class="sub">— выберите категорию или группу в заявке, чтобы вуз попал в нужную таблицу отчёта</span>':`<b>${esc(g.title)}</b>`}</div>
+    ${g.list.length?`<div class="list">${g.list.map(a=>{const u=uniOf(a.uniId)||{};return `<div class="li"><div class="t" data-open-app="${esc(a.id)}"><b>${esc(a.uni)}</b> <span class="sub">${esc([a.rating||u.rating,a.round,a.deadline?fmtDate(a.deadline):(a.deadlineText||u.deadlineText||"").split("\n")[0]].filter(Boolean).join(" · "))}</span></div>
       <select class="appsel" data-app-tier="${esc(a.id)}">${opts(TIERS,a.tier)}</select><select class="appsel" data-app-status="${esc(a.id)}">${opts(STATUS,a.status,false)}</select>${dueChip(a)}</div>`}).join("")}</div>`:'<p class="note" style="margin:4px 0 10px">Нет вузов в этой категории.</p>'}</div>`).join("")}
   </fieldset>${S.canWrite?'<div class="actions"><span class="sp"></span><button class="btn primary" id="u-save">Сохранить заголовки и примечание</button></div>':""}`;
 }
@@ -629,7 +671,7 @@ function reportHTML(id){
   const s=studentOf(id);const T=(h,rows)=>`<table class="rt"><thead><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
   const tests=studentTests(id);const types=[...new Set(tests.map(t=>t.test))];
   const trow=types.map(tt=>{const b=bestOfficial(id,tt);const last=tests.filter(t=>t.test===tt).at(-1);const use=b||last;
-    const secs=Object.entries(use.sections||{}).filter(([k,v])=>v!=="").map(([k,v])=>`${k} ${v}`).join(", ");
+    const secs=secEntries(use).map(([k,v])=>`${k} ${v}`).join(", ");
     const mocks=tests.filter(t=>t.test===tt&&t.kind!=="Официальный"&&num(t.total)!=null);
     const trend=mocks.length>1?` Пробные: ${mocks.map(m=>fmtScore(tt,num(m.total))).join(" → ")}.`:"";
     const target=(s.targets||{})[tt];
@@ -637,14 +679,8 @@ function reportHTML(id){
   const mrow=(s.metrics||[]).map(m=>`<tr><td><b>${esc(m.label)}</b></td><td>${esc(m.result)}</td><td>${esc(m.comment)}</td></tr>`);
   const tasks=S.tasks.filter(t=>t.studentId===id).sort((a,b)=>(a.sort??0)-(b.sort??0));
   const prep=tasks.filter(t=>t.kind!=="timeline"),tl=tasks.filter(t=>t.kind==="timeline");
-  const apps=S.apps.filter(a=>a.studentId===id);const titles=s.tierTitles||{};
-  const groups=[...TIERS,""].map(t=>[t,apps.filter(a=>(a.tier||"")===t).sort((x,y)=>(x.deadline||"9999").localeCompare(y.deadline||"9999"))]).filter(([t,l])=>l.length);
-  const dl=(a,u)=>u.deadlineText||dlSummary(u)||(a.deadline?fmtDate(a.deadline):"");
-  const aid=(a,u)=>{const x=u.aid||"";const m=x.match(/^([^.]{3,80}\.)\s*(.*)$/s);return (m?`<b>${esc(m[1])}</b> ${esc(m[2])}`:esc(x))+(a.note?`${x?" ":""}${esc(a.note)}`:"")};
-  let n=0;
-  const uniSec=groups.map(([t,l])=>{n++;const head=`<h3>${n}. ${esc(t?(titles[t]||TIER_DEFAULT[t]):"Другие вузы")}</h3>`;
-    if(t==="Гос. стипендия")return head+T(["Страна","Программа","Дедлайн подачи","Финансовая поддержка"],l.map(a=>{const u=uniOf(a.uniId)||{};return `<tr><td><b>${esc(u.country||"")}</b></td><td>${esc(a.uni)}</td><td>${esc(dl(a,u))}</td><td>${aid(a,u)}</td></tr>`}));
-    return head+T(["Университет","Рейтинг","Дедлайн подачи","Финансовая поддержка"],l.map(a=>{const u=uniOf(a.uniId)||{};return `<tr><td><b>${esc(a.uni)}</b></td><td>${esc(u.rating||"—")}</td><td>${esc(dl(a,u))}</td><td>${aid(a,u)}</td></tr>`}))}).join("");
+  const groups=uniGroups(s).filter(g=>g.list.length);const gnotes=s.groupNotes||{};
+  const uniSec=groups.map((g,k)=>`<h3>${k+1}. ${esc(g.title)}</h3>${gnotes[g.key]?`<p>${esc(gnotes[g.key])}</p>`:""}${groupTable(s,g,T)}`).join("");
   const lm=S.meetings.filter(m=>m.studentId===id).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,3);
   const {done,total}=checkProg(s);
   return `<div class="rep">
@@ -692,6 +728,14 @@ function appSheet(id){
     <label>Статус заявки<select id="a-status">${opts(STATUS,a.status,false)}</select></label>
     <label>Категория (для отчёта)<select id="a-tier">${opts(TIERS,a.tier)}</select></label>
     <label class="full">Примечание для этого студента (добавится к «Финансовой поддержке» в отчёте)<textarea id="a-note" style="min-height:52px">${esc(a.note)}</textarea></label>
+    <div class="sec">Для отчёта этого студента <span class="sub" style="text-transform:none;letter-spacing:0">— если пусто, берётся из каталога</span></div>
+    <label>Группа в отчёте<input id="a-grp" list="a-grps" value="${esc(a.grp)}" placeholder="например: Гонконг (Reach / Target)"><datalist id="a-grps">${[...new Set(S.rawApps.filter(x=>x.studentId===a.studentId&&x.grp).map(x=>x.grp))].map(g=>`<option value="${esc(g)}">`).join("")}</datalist></label>
+    <label>Порядок в группе<input id="a-sort" inputmode="numeric" value="${esc(a.sort??"")}"></label>
+    <label>Рейтинг<input id="a-rating" value="${esc(a.rating)}" placeholder="${esc((u||{}).rating||"")}"></label>
+    <label>SAT (диапазон)<input id="a-sat" value="${esc(a.satRange)}" placeholder="1450–1570"></label>
+    <label class="full">Требования<input id="a-reqs" value="${esc(a.reqs)}" placeholder="${esc((u||{}).reqs||"")}"></label>
+    <label class="full">Дедлайн текстом<textarea id="a-dltext" style="min-height:44px" placeholder="${esc((u||{}).deadlineText||"")}">${esc(a.deadlineText)}</textarea></label>
+    <label class="full">Финансовая поддержка<textarea id="a-aid" style="min-height:52px" placeholder="${esc((u||{}).aid||"")}">${esc(a.aid)}</textarea></label>
     <label class="full">Свой дедлайн (если отличается от каталога)<input type="date" id="a-deadline" value="${esc(a.deadlineOverride||"")}"></label>
     <p class="full note" id="a-dl"></p>
     <div class="sec">Для этого вуза</div>
@@ -708,7 +752,7 @@ function appSheet(id){
     $("#cancel").onclick=backOrClose;if(!S.canWrite)return;
     $("#save").onclick=async()=>{
       const data={uniId:val("a-uniid"),program:val("a-prog"),round:val("a-round"),deadlineOverride:val("a-deadline"),status:val("a-status"),
-        supp:val("a-supp"),tier:val("a-tier"),note:val("a-note"),result:val("a-result"),amount:val("a-amount"),notes:val("a-notes"),updatedAt:new Date().toISOString()};
+        supp:val("a-supp"),tier:val("a-tier"),note:val("a-note"),grp:val("a-grp"),sort:val("a-sort")===""?null:parseInt(val("a-sort"),10),rating:val("a-rating"),satRange:val("a-sat"),reqs:val("a-reqs"),deadlineText:$("#a-dltext").value.trim(),aid:$("#a-aid").value.trim(),result:val("a-result"),amount:val("a-amount"),notes:val("a-notes"),updatedAt:new Date().toISOString()};
       await save("apps",id,data,a);await reload("apps");backOrClose();
     };
     delBtn(async()=>{await remove("apps",id);await reload("apps");backOrClose()});
@@ -901,11 +945,11 @@ document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",
 
 /* ---------- Supabase ---------- */
 const TABLES={students:"tracker_students",unis:"tracker_universities",apps:"tracker_applications",tests:"tracker_tests",tasks:"tracker_tasks",meetings:"tracker_meetings"};
-const FIELD={doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
+const FIELD={satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
-  students:["name","checklist","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
+  students:["name","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
   unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at"],
-  apps:["student_id","uni_id","program","round","deadline_override","status","tier","note","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"],
+  apps:["student_id","uni_id","program","round","deadline_override","status","tier","note","grp","sort","rating","sat_range","reqs","deadline_text","aid","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"],
   tests:["student_id","date","test","kind","sections","total","comment","created_at","updated_at"],
   tasks:["student_id","kind","period","title","due","done","sort","created_at","updated_at"],
   meetings:["student_id","date","author","notes","next_steps","created_at","updated_at"]};
