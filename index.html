@@ -448,12 +448,13 @@ function profileFields(s){return `<div class="grid">
     <label>ОРТ<input id="s-ort" inputmode="numeric" value="${esc(s.ort)}"></label>
     <label>GPA<input id="s-gpa" value="${esc(s.gpa)}"></label>
     <div class="sec">Контакты</div>
+    <label class="full">Email студента для личного кабинета <span class="sub">— по нему студент входит на student.html и видит только свои вузы, задачи и баллы</span><input id="s-semail" type="email" value="${esc(s.studentEmail)}" placeholder="student@gmail.com"></label>
     <label>Телефон / Telegram<input id="s-contact" value="${esc(s.contact)}"></label>
     <label>Родитель<input id="s-parent" value="${esc(s.parent)}"></label>
     <label class="full">Заметки<textarea id="s-notes">${esc(s.notes)}</textarea></label>
   </div>`}
 const profileData=()=>({name:val("s-name"),checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
-  ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),parent:val("s-parent"),notes:val("s-notes"),updatedAt:new Date().toISOString()});
+  ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),studentEmail:val("s-semail").toLowerCase(),parent:val("s-parent"),notes:val("s-notes"),updatedAt:new Date().toISOString()});
 function profileSheetNew(){
   openSheet(`<h3>Новый студент</h3><fieldset class="fs"${ro()}>${profileFields({type:"Поступление",status:"Активен"})}</fieldset>${actions(true)}`,()=>{
     $("#cancel").onclick=closeSheet;if(!S.canWrite)return;
@@ -945,9 +946,9 @@ document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",
 
 /* ---------- Supabase ---------- */
 const TABLES={students:"tracker_students",unis:"tracker_universities",apps:"tracker_applications",tests:"tracker_tests",tasks:"tracker_tasks",meetings:"tracker_meetings"};
-const FIELD={satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
+const FIELD={studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
-  students:["name","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
+  students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
   unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at"],
   apps:["student_id","uni_id","program","round","deadline_override","status","tier","note","grp","sort","rating","sat_range","reqs","deadline_text","aid","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"],
   tests:["student_id","date","test","kind","sections","total","comment","created_at","updated_at"],
@@ -968,6 +969,7 @@ function makeDb(sb){
 }
 function fail(e){const c=e&&e.code;
   if(c==="23503"){toast("Нельзя удалить: к этой записи привязаны заявки");return}
+  if(c==="23505"){toast("Этот email уже привязан к другому студенту");return}
   if(c==="42501"||c==="PGRST301"){toast("Нет прав на изменение");return}
   console.error(e);toast("Не сохранилось. Проверьте интернет и попробуйте ещё раз")}
 function clean(o){const r={};for(const k in o)if(o[k]!==undefined&&k!=="id")r[k]=o[k];return r}
