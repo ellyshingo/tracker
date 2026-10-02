@@ -363,7 +363,7 @@ function vApps(){
   const rows=S.apps.filter(a=>{const s=studentOf(a.studentId)||{};return(!q||[s.name,a.uni,a.program,a.country].join(" ").toLowerCase().includes(q))&&(!f.astat||(f.astat==="__open"?!SUBMITTED.has(a.status):a.status===f.astat))&&(!f.acur||(s.curator||"")===f.acur)})
     .sort((a,b)=>{const pa=SUBMITTED.has(a.status)||daysLeft(a.deadline)<0?1:0,pb=SUBMITTED.has(b.status)||daysLeft(b.deadline)<0?1:0;if(pa!==pb)return pa-pb;return(a.deadline||"9999").localeCompare(b.deadline||"9999")});
   const body=rows.map(a=>{const s=studentOf(a.studentId)||{};const past=SUBMITTED.has(a.status)||daysLeft(a.deadline)<0;
-    return `<tr data-open-app="${esc(a.id)}" class="${past?"past":""}"><td><b>${esc(s.name||"—")}</b><div class="sub">${esc(s.curator||"")}</div></td><td>${esc(a.uni||"")}<div class="sub">${esc(a.program||"")}</div></td><td>${esc(a.country||"")}</td><td>${esc(a.round||"")}</td><td class="num">${fmtDate(a.deadline)}</td><td>${dueChip(a)}</td>
+    return `<tr data-open-app="${esc(a.id)}" class="${past?"past":""}"><td><b>${esc(s.name||"—")}</b><div class="sub">${esc(s.curator||"")}</div></td><td>${esc(a.uni||"")}${a.addedBy==="student"?' <span class="chip acc" title="Студент добавил этот вуз сам в личном кабинете">от студента</span>':""}${a.studentNote?' <span class="chip" title="Есть заметка студента — откройте заявку">заметка</span>':""}<div class="sub">${esc(a.program||"")}</div></td><td>${esc(a.country||"")}</td><td>${esc(a.round||"")}</td><td class="num">${fmtDate(a.deadline)}</td><td>${dueChip(a)}</td>
     <td><div class="dots">${workDot(a.supp,"Доп. эссе")}</div></td><td>${progChip(s)}</td><td>${statusChip(a.status)}${a.result&&a.result!=="—"?`<div class="sub">${esc(a.result)}${a.amount?` · $${Number(a.amount).toLocaleString("ru")}`:""}</div>`:""}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-aq" placeholder="Поиск: студент, вуз, программа" value="${esc(f.aq)}">
     <select id="f-astat"><option value="">Все статусы</option><option value="__open"${f.astat==="__open"?" selected":""}>Ещё не подано</option>${opts(STATUS,f.astat==="__open"?"":f.astat,false)}</select>
@@ -894,7 +894,9 @@ function appSheet(id){
   const a=S.rawApps.find(x=>x.id===id);if(!a)return;const r=S.apps.find(x=>x.id===id)||a;const dis=S.canWrite?"":" disabled";
   const u=uniOf(a.uniId);
   const unis=S.unis.slice().sort((x,y)=>(x.name||"").localeCompare(y.name||"","ru"));
-  openSheet(`<h3>${esc(studentName(a.studentId))} · ${esc(r.uni||"")}</h3><fieldset style="border:0;padding:0;margin:0"${dis}><div class="grid">
+  // что сделал студент в личном кабинете: сам добавил вуз и/или оставил заметку (только чтение — правит студент)
+  const stu=a.addedBy==="student"||a.studentNote?`<div class="note" style="margin:0 0 12px;padding:8px 12px;border-radius:8px;background:var(--surface-2)">${a.addedBy==="student"?"<b>Этот вуз добавил сам студент</b> в личном кабинете.":""}${a.addedBy==="student"&&a.studentNote?"<br>":""}${a.studentNote?`<b>Заметка студента:</b> ${esc(a.studentNote).replace(/\n/g,"<br>")}`:""}</div>`:"";
+  openSheet(`<h3>${esc(studentName(a.studentId))} · ${esc(r.uni||"")}</h3>${stu}<fieldset style="border:0;padding:0;margin:0"${dis}><div class="grid">
     <label class="full">Вуз<select id="a-uniid">${unis.map(x=>`<option value="${esc(x.id)}"${x.id===a.uniId?" selected":""}>${esc(x.name)}${x.country?" · "+esc(x.country):""}</option>`).join("")}${a.uniId&&!u?`<option selected value="${esc(a.uniId)}">(вуз удалён из каталога)</option>`:""}</select></label>
     <label class="full">Программа<input id="a-prog" value="${esc(a.program)}"></label>
     <label>Тип подачи<select id="a-round">${opts(ROUNDS,a.round)}</select></label>
@@ -1061,7 +1063,7 @@ function uniField(u,[c,t,l,,o]){const v=u[camel(c)]??"";const id="ux-"+c;const p
   return `<label>${esc(l)}<input id="${id}" type="${ty}"${t==="dec"?' step="0.1" min="0"':t==="int"?' step="1" min="0"':""} value="${esc(v)}"${ph}></label>`}
 const uniExtraHtml=u=>[...new Set(UNI_EXTRA.map(x=>x[3]))].map(g=>`<div class="sec">${g==="Деньги"?"Деньги (USD в год)":esc(g)}</div>`+UNI_EXTRA.filter(x=>x[3]===g).map(x=>uniField(u,x)).join("")).join("");
 const usd=n=>n==null||n===""?"":"$"+Number(n).toLocaleString("ru");
-const tuitionText=u=>u.tuitionUsdMin==null&&u.tuitionUsdMax==null?"":u.tuitionUsdMax!=null&&u.tuitionUsdMax!==u.tuitionUsdMin?`${usd(u.tuitionUsdMin??0)}–${usd(u.tuitionUsdMax).slice(1)}`:usd(u.tuitionUsdMin??u.tuitionUsdMax);
+const tuitionText=u=>u.tuitionUsdMin==null&&u.tuitionUsdMax==null?"":!u.tuitionUsdMin&&!u.tuitionUsdMax?"бесплатно":u.tuitionUsdMax!=null&&u.tuitionUsdMax!==u.tuitionUsdMin?`${usd(u.tuitionUsdMin??0)}–${usd(u.tuitionUsdMax).slice(1)}`:usd(u.tuitionUsdMin??u.tuitionUsdMax);
 function uniSheet(id){
   const u=S.unis.find(x=>x.id===id)||{deadlines:{}};const isNew=!id;const dis=S.canWrite?"":" disabled";const d=u.deadlines||{};
   const apps=id?S.apps.filter(a=>a.uniId===id):[];
@@ -1151,14 +1153,14 @@ const UNI_EXTRA=[
   ["sat_policy","list","SAT / ACT","Требования",["Обязателен","По желанию","Не рассматривается","Неизвестно"]],["sat_range","text","Средний SAT","Требования","1450–1550"],
   ["entrance_exam","text","Вступительный экзамен","Требования","CSCA, свой экзамен, интервью…"],
   ["admit_rate","dec","% принятых","Требования"],["admit_rate_intl","dec","% принятых иностранцев","Требования"],
-  ["platform","list","Платформа подачи","Подача",["Common App","UCAS","Coalition","Свой портал","Другое"]],["fee_waiver","list","Fee waiver","Подача",YNU],["css_profile","list","Нужен CSS Profile","Подача",YNU],
+  ["intl_portal","text","Портал подачи для иностранцев","Подача","https://…"],["platform","list","Платформа подачи","Подача",["Common App","UCAS","Coalition","Свой портал","Другое"]],["fee_waiver","list","Fee waiver","Подача",YNU],["css_profile","list","Нужен CSS Profile","Подача",YNU],
   ["recs","int","Рекомендаций","Подача"],["supp_essays","int","Доп. эссе","Подача"],["interview","list","Интервью","Подача",["Обязательно","По желанию","Нет","Неизвестно"]],
   ["aid_deadline","date","Дедлайн фин. помощи / стипендии","Подача"],
   ["verified_intake","list","Данные проверены для набора","Актуальность",["2026","2027","2028"]],["verified_at","date","Дата проверки","Актуальность"],["source","area","Источник","Актуальность","ссылки; «от поступивших студентов»"],
 ];
 const UNI_NULL=new Set(UNI_EXTRA.filter(x=>["int","dec","date"].includes(x[1])).map(x=>x[0]));
 const camel=c=>c.replace(/_([a-z])/g,(_,l)=>l.toUpperCase());
-const FIELD={uniType:"uni_type",tuitionUsdMin:"tuition_usd_min",tuitionUsdMax:"tuition_usd_max",coaUsd:"coa_usd",appFeeUsd:"app_fee_usd",costsNote:"costs_note",aidPolicy:"aid_policy",meetsNeed:"meets_need",fullRide:"full_ride",ieltsMin:"ielts_min",toeflMin:"toefl_min",duolingoMin:"duolingo_min",satPolicy:"sat_policy",entranceExam:"entrance_exam",admitRate:"admit_rate",admitRateIntl:"admit_rate_intl",feeWaiver:"fee_waiver",cssProfile:"css_profile",suppEssays:"supp_essays",aidDeadline:"aid_deadline",verifiedIntake:"verified_intake",verifiedAt:"verified_at",timeStart:"time_start",timeEnd:"time_end",classId:"class_id",studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
+const FIELD={intlPortal:"intl_portal",studentNote:"student_note",addedBy:"added_by",uniType:"uni_type",tuitionUsdMin:"tuition_usd_min",tuitionUsdMax:"tuition_usd_max",coaUsd:"coa_usd",appFeeUsd:"app_fee_usd",costsNote:"costs_note",aidPolicy:"aid_policy",meetsNeed:"meets_need",fullRide:"full_ride",ieltsMin:"ielts_min",toeflMin:"toefl_min",duolingoMin:"duolingo_min",satPolicy:"sat_policy",entranceExam:"entrance_exam",admitRate:"admit_rate",admitRateIntl:"admit_rate_intl",feeWaiver:"fee_waiver",cssProfile:"css_profile",suppEssays:"supp_essays",aidDeadline:"aid_deadline",verifiedIntake:"verified_intake",verifiedAt:"verified_at",timeStart:"time_start",timeEnd:"time_end",classId:"class_id",studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
   students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
   unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at",...UNI_EXTRA.map(x=>x[0])],

@@ -114,6 +114,12 @@ h2.sec{font-size:14px;margin:20px 0 8px;color:var(--fg)}
 .task{align-items:flex-start}
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
 
+textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:10px 12px;width:100%;min-height:84px;resize:vertical}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ued{display:grid;gap:8px;margin:10px 0 4px}.ued label{display:grid;gap:4px;font-size:12.5px;color:var(--muted)}.ued .acts{display:flex;gap:8px;flex-wrap:wrap}
+.pickbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-bottom:12px}.pickbar select{width:auto;max-width:42vw}
+.addbtn{width:100%;margin-bottom:12px}
+.chip.in{background:var(--good-soft);color:var(--good)}
 .docup{display:grid;gap:10px;padding:14px}.docup label{display:grid;gap:4px;font-size:14px}.docup select,.docup input[type=file]{font:inherit;max-width:100%}
 .docrow{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}.docrow:last-child{border-bottom:0}.docrow .t{flex:1;min-width:0;overflow-wrap:anywhere}.docrow .da{display:flex;gap:6px;flex-shrink:0}
 </style>
@@ -129,6 +135,7 @@ h2.sec{font-size:14px;margin:20px 0 8px;color:var(--fg)}
 <script>
 (() => {
 const STATUS=["Планируем","Готовим","Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"];
+const ROUNDS=["ED","ED2","EA","REA","RD","Rolling","UCAS","Стипендия","Другое"]; // как в index.html и tracker_valid_round()
 const SUBMITTED=new Set(["Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"]);
 const ST_CLS={"Планируем":"plan","Готовим":"prep","Подано":"sent","Интервью":"sent","Принят":"ok","Лист ожидания":"prep","Отказ":"no","Отозвано":"no"};
 const SEC_ORDER=["Listening","Reading","Reading & Writing","Writing","Speaking","Math"];
@@ -159,7 +166,10 @@ const TABS=[["home","Главная"],["schedule","Расписание"],["unis
 
 function render(){
   document.querySelectorAll("#bnav button").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===tab?"page":"false"));
+  // не теряем набранный, но ещё не сохранённый текст (заметки, программа), если страница перерисовалась — например, после возврата в приложение
+  const keep={};document.querySelectorAll("#main textarea[id],#main input[id^='ed-prog-']").forEach(e=>keep[e.id]=e.value);
   $("#main").innerHTML=({home:vHome,schedule:vSchedule,unis:vUnis,plan:vTasks,tests:vTests,docs:vDocs}[tab]||vHome)();
+  for(const id in keep){const el=document.getElementById(id);if(el)el.value=keep[id]}
   bind();window.scrollTo(0,0);if(tab==="docs")loadDocs();
 }
 function todayClasses(){const dow=new Date().getDay();return (D.classes||[]).filter(c=>PATTERN_DAYS(c.pattern).includes(dow)).sort((a,b)=>String(a.start).localeCompare(String(b.start)))}
@@ -198,24 +208,94 @@ function vSchedule(){
   <div class="card">${list.map(classRow).join("")}</div>`;
 }
 let openUni=null;
+/* --- выбор вузов из каталога: студент сам добавляет вуз, тип подачи, программу; заметки к своим вузам --- */
+let picking=false,CAT=null,catQ="",catCountry="",openCat=null;
+const usd=n=>n==null?"":"$"+Number(n).toLocaleString("ru");
+const tuition=u=>u.tuition_usd_min==null&&u.tuition_usd_max==null?"":!u.tuition_usd_min&&!u.tuition_usd_max?"обучение бесплатно":u.tuition_usd_max!=null&&u.tuition_usd_max!==u.tuition_usd_min?`${usd(u.tuition_usd_min??0)}–${usd(u.tuition_usd_max).slice(1)} в год`:`${usd(u.tuition_usd_min??u.tuition_usd_max)} в год`;
+const isUrl=v=>/^https?:\/\//.test(v||"");
+// варианты типа подачи: с датой из каталога, если она есть
+const roundOpts=(dl,cur)=>`<option value="">не выбран</option>`+ROUNDS.map(r=>`<option value="${r}"${r===cur?" selected":""}>${r}${dl&&dl[r]?" — "+fmtDate(dl[r]):""}</option>`).join("");
+// по умолчанию — ближайший ещё не прошедший дедлайн вуза
+const nearestRound=dl=>Object.entries(dl||{}).filter(([r,d])=>ROUNDS.includes(r)&&daysLeft(d)!=null&&daysLeft(d)>=0).sort((a,b)=>a[1].localeCompare(b[1])).map(x=>x[0])[0]||"";
+const kv=(lab,v)=>v?`<div class="kv"><span>${lab}</span><div>${esc(v).replace(/\n/g,"<br>")}</div></div>`:"";
+const portalLinks=x=>`${isUrl(x.intl_portal)?`<a class="lnk" href="${esc(x.intl_portal)}" target="_blank" rel="noopener">Портал подачи для иностранцев ↗</a><br>`:""}${isUrl(x.link)?`<a class="lnk" href="${esc(x.link)}" target="_blank" rel="noopener">Сайт вуза ↗</a>`:""}`;
+async function loadCatalog(){const {data,error}=await SB.rpc("student_catalog");if(error){console.error(error);CAT=[];toast("Каталог пока недоступен. Сообщите куратору.");return}CAT=data||[]}
+function vPick(){
+  if(!CAT)return '<h1 class="ttl">Каталог вузов</h1><div class="card empty">Загружаю каталог…</div>';
+  const countries=[...new Set(CAT.map(u=>u.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ru"));
+  return `<button class="btn small" id="pick-back" type="button" style="margin-bottom:10px">← Мои вузы</button>
+  <h1 class="ttl">Каталог вузов</h1><div class="sub" style="margin:-6px 0 12px">Выберите вуз, тип подачи — и он появится в вашем списке. Куратор увидит это сразу.</div>
+  <div class="pickbar"><input id="cat-q" type="search" placeholder="Название, город, направление" value="${esc(catQ)}" aria-label="Поиск по каталогу">
+  <select id="cat-country" aria-label="Страна"><option value="">Все страны</option>${countries.map(c=>`<option${c===catCountry?" selected":""}>${esc(c)}</option>`).join("")}</select></div>
+  <div id="cat-list">${catList()}</div>`;
+}
+function catList(){
+  const q=catQ.trim().toLowerCase();const mine=new Set(D.apps.map(a=>a.uni_id));
+  const rows=CAT.filter(u=>(!catCountry||u.country===catCountry)&&(!q||[u.name,u.city,u.country,u.majors].join(" ").toLowerCase().includes(q)));
+  if(!rows.length)return '<div class="card empty small">Ничего не найдено. Если нужного вуза нет в каталоге — напишите куратору.</div>';
+  return `<div class="card">${rows.slice(0,150).map(u=>{const op=openCat===u.id,inList=mine.has(u.id);return `<div class="uni${op?" open":""}">
+    <button class="uh" data-cat="${esc(u.id)}" aria-expanded="${op}"><div class="t"><b>${esc(u.name)}</b><div class="sub">${esc([u.country,u.city,tuition(u),u.ielts_min!=null?"IELTS "+u.ielts_min:""].filter(Boolean).join(" · "))}</div></div>
+      ${inList?'<span class="chip in">в списке</span>':""}<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    ${op?`<div class="ud">
+      ${kv("Рейтинг",u.rating)}${kv("Направления",u.majors)}${kv("Требования",u.reqs)}${kv("Экзамен",u.entrance_exam)}${kv("Стоимость",tuition(u))}${kv("Расходы",u.costs_note)}${kv("Стипендии",u.aid)}${kv("Дедлайны",u.deadline_text)}
+      ${portalLinks(u)}
+      ${inList?'<p class="sub" style="margin-top:10px">Этот вуз уже в вашем списке.</p>':`<div class="ued"><label>Тип подачи<select id="add-round-${esc(u.id)}">${roundOpts(u.deadlines,nearestRound(u.deadlines))}</select></label>
+        <label>Программа / специальность (необязательно)<input id="add-prog-${esc(u.id)}" maxlength="200" placeholder="например, Computer Science"></label>
+        <button class="btn primary" type="button" data-add="${esc(u.id)}">Добавить в мой список</button></div>`}
+    </div>`:""}</div>`}).join("")}</div>${rows.length>150?`<p class="sub">Показаны первые 150 — уточните поиск.</p>`:""}`;
+}
+function bindPick(){
+  const list=$("#cat-list");if(!list)return;
+  list.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{openCat=openCat===b.dataset.cat?null:b.dataset.cat;list.innerHTML=catList();bindPick()});
+  list.querySelectorAll("[data-add]").forEach(b=>b.onclick=async()=>{const id=b.dataset.add;b.disabled=true;
+    const {error}=await SB.rpc("student_add_app",{p_uni_id:id,p_round:$("#add-round-"+CSS.escape(id)).value||null,p_program:$("#add-prog-"+CSS.escape(id)).value||null});
+    if(error){b.disabled=false;toast(/already/.test(error.message)?"Этот вуз уже в вашем списке":"Не получилось добавить. Попробуйте ещё раз");return}
+    toast("Вуз добавлен в ваш список");const y=window.scrollY;await load();window.scrollTo(0,y)});
+}
+// действия с вузами в моём списке (вызывается из bind)
+function bindMine(){
+  const on=(sel,fn)=>document.querySelectorAll(sel).forEach(fn);
+  const keepY=async f=>{const y=window.scrollY;await f();window.scrollTo(0,y)};
+  $("#pick-open")&&($("#pick-open").onclick=async()=>{picking=true;openCat=null;render();if(!CAT){await loadCatalog();if(picking&&tab==="unis")render()}});
+  $("#pick-back")&&($("#pick-back").onclick=()=>{picking=false;render()});
+  $("#cat-q")&&($("#cat-q").oninput=e=>{catQ=e.target.value;$("#cat-list").innerHTML=catList();bindPick()});
+  $("#cat-country")&&($("#cat-country").onchange=e=>{catCountry=e.target.value;$("#cat-list").innerHTML=catList();bindPick()});
+  on("[data-upd]",b=>b.onclick=()=>keepY(async()=>{const id=b.dataset.upd;b.disabled=true;
+    const {error}=await SB.rpc("student_update_app",{p_app_id:id,p_round:$("#ed-round-"+CSS.escape(id)).value||null,p_program:$("#ed-prog-"+CSS.escape(id)).value||null});
+    if(error){b.disabled=false;toast("Не сохранилось. Попробуйте ещё раз");return}toast("Сохранено");await load()}));
+  on("[data-del]",b=>b.onclick=()=>{if(!b.dataset.armed){b.dataset.armed="1";b.textContent="Точно убрать?";setTimeout(()=>{delete b.dataset.armed;b.textContent="Убрать из списка"},4000);return}
+    keepY(async()=>{b.disabled=true;const {error}=await SB.rpc("student_remove_app",{p_app_id:b.dataset.del});if(error){b.disabled=false;toast("Не получилось убрать. Попробуйте ещё раз");return}openUni=null;toast("Вуз убран из списка");await load()})});
+  on("[data-note]",b=>b.onclick=()=>keepY(async()=>{const id=b.dataset.note;b.disabled=true;
+    const {error}=await SB.rpc("student_set_app_note",{p_app_id:id,p_note:$("#note-"+CSS.escape(id)).value});
+    b.disabled=false;if(error){toast("Заметка не сохранилась. Попробуйте ещё раз");return}const a=D.apps.find(x=>x.id===id);if(a)a.student_note=$("#note-"+CSS.escape(id)).value.trim();toast("Заметка сохранена")}));
+  if(picking)bindPick();
+}
 function vUnis(){
-  const a=D.apps;if(!a.length)return '<h1 class="ttl">Университеты</h1><div class="card empty">Список вузов пока не составлен. Его добавит ваш куратор.</div>';
+  if(picking)return vPick();
+  const a=D.apps;if(!a.length)return '<h1 class="ttl">Университеты</h1><button class="btn primary addbtn" id="pick-open" type="button">+ Добавить вуз из каталога</button><div class="card empty">Список вузов пока пуст. Добавьте вузы из каталога сами или дождитесь, пока их добавит куратор.</div>';
   const sent=a.filter(x=>SUBMITTED.has(x.status)).length,ok=a.filter(x=>x.status==="Принят").length;
   let groups;
   if(a.some(x=>x.grp)){const names=[];a.forEach(x=>{const g=x.grp||"Другие вузы";if(!names.includes(g))names.push(g)});groups=names.map(n=>[n,a.filter(x=>(x.grp||"Другие вузы")===n)])}
   else groups=[...TIERS,""].map(t=>[t||"Другие вузы",a.filter(x=>(x.tier||"")===t)]).filter(([t,l])=>l.length);
   const det=(lab,v)=>v?`<div class="kv"><span>${lab}</span><div>${esc(v).replace(/\n/g,"<br>")}</div></div>`:"";
   return `<h1 class="ttl">Университеты</h1><div class="sub" style="margin:-6px 0 12px">${a.length} в списке · подано ${sent}${ok?` · поступлений ${ok}`:""}</div>
+  <button class="btn primary addbtn" id="pick-open" type="button">+ Добавить вуз из каталога</button>
   ${groups.map(([g,l])=>`<h2 class="sec">${esc(g)}</h2><div class="card">${l.map(x=>{const op=openUni===x.id;return `<div class="uni${op?" open":""}">
     <button class="uh" data-uni="${esc(x.id)}" aria-expanded="${op}"><div class="t"><b>${esc(x.uni)}</b><div class="sub">${esc([x.country,x.deadline?"дедлайн "+fmtDate(x.deadline):""].filter(Boolean).join(" · "))}</div></div>
       <span class="stc st-${ST_CLS[x.status]||"plan"}">${esc(x.status||"")}</span><svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     ${op?`<div class="ud">
       <label class="stsel">Статус заявки<select data-app="${esc(x.id)}">${STATUS.map(s=>`<option${s===x.status?" selected":""}>${s}</option>`).join("")}</select></label>
       ${dueChip(x)?`<div style="margin:2px 0 8px">${dueChip(x)}</div>`:""}
-      ${det("Требования",x.reqs)}${det("SAT",x.sat_range)}${det("Программы",x.program)}${det("Рейтинг",x.rating)}${det("Тип подачи",x.round)}${det("Дедлайн",x.deadline_text||(x.deadline?fmtDate(x.deadline):""))}
-      ${x.link&&/^https?:\/\//.test(x.link)?`<a class="lnk" href="${esc(x.link)}" target="_blank" rel="noopener">Сайт вуза ↗</a>`:""}
+      ${x.added_by==="student"?`<div class="ued"><label>Тип подачи<select id="ed-round-${esc(x.id)}">${roundOpts(x.deadlines,x.round||"")}</select></label>
+        <label>Программа / специальность<input id="ed-prog-${esc(x.id)}" maxlength="200" value="${esc(x.program)}"></label>
+        <div class="acts"><button class="btn" type="button" data-upd="${esc(x.id)}">Сохранить</button><button class="btn" type="button" data-del="${esc(x.id)}">Убрать из списка</button></div></div>`
+        :det("Тип подачи",x.round)+det("Программы",x.program)}
+      ${det("Требования",x.reqs)}${det("SAT",x.sat_range)}${det("Рейтинг",x.rating)}${det("Стоимость",tuition(x))}${det("Дедлайн",x.deadline_text||(x.deadline?fmtDate(x.deadline):""))}
+      <div class="ued"><label>Мои заметки <span style="font-weight:400">(видит куратор)</span><textarea id="note-${esc(x.id)}" maxlength="4000" placeholder="Что важно помнить: эссе, вопросы куратору, впечатления…">${esc(x.student_note)}</textarea></label>
+        <div class="acts"><button class="btn" type="button" data-note="${esc(x.id)}">Сохранить заметку</button></div></div>
+      ${portalLinks(x)}
     </div>`:""}</div>`}).join("")}</div>`).join("")}
-  <p class="sub" style="margin-top:14px">Нажмите на вуз, чтобы увидеть требования и поменять статус — куратор сразу это увидит.</p>`;
+  <p class="sub" style="margin-top:14px">Нажмите на вуз, чтобы увидеть требования, поменять статус и записать заметки — куратор сразу это увидит. Вузы, которые добавили вы сами, можно редактировать и убирать из списка.</p>`;
 }
 function taskRow(t){const st=taskSt(t),d=daysLeft(t.due),late=st!=="Готово"&&d!=null&&d<0;
   return `<div class="task${st==="Готово"?" done":""}"><input type="checkbox" data-task="${esc(t.id)}"${st==="Готово"?" checked":""} aria-label="Готово"><div class="tt">${esc(t.title).replace(/\n/g,"<br>")}
@@ -234,6 +314,7 @@ async function setTask(id,st){const {error}=await SB.rpc("student_set_task_statu
   const t=D.tasks.find(x=>x.id===id);if(t){t.status=st;t.done=st==="Готово"}render()}
 function bind(){
   document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+  if(tab==="unis")bindMine();
   document.querySelectorAll("[data-pat]").forEach(b=>b.onclick=()=>{schedPat=b.dataset.pat;render()});
   document.querySelectorAll("[data-uni]").forEach(b=>b.onclick=()=>{openUni=openUni===b.dataset.uni?null:b.dataset.uni;const y=window.scrollY;render();window.scrollTo(0,y)});
   document.querySelectorAll("[data-app]").forEach(sel=>sel.onchange=async()=>{sel.disabled=true;const {error}=await SB.rpc("student_set_app_status",{app_id:sel.dataset.app,new_status:sel.value});
@@ -271,7 +352,7 @@ document.addEventListener("submit",async e=>{if(e.target.id!=="doc-form")return;
   const b=e.target.querySelector("button");b.disabled=true;let n=0;
   for(const f of fl){b.textContent="Загружаю "+(n+1)+"/"+fl.length+"…";const fd=new FormData();fd.append("action","upload");fd.append("category",$("#doc-cat").value);fd.append("file",f,f.name);try{await driveCall(fd);n++}catch(err){toast(f.name+": "+err.message)}}
   b.disabled=false;b.textContent="Загрузить";if(n){toast("Загружено: "+n);e.target.reset()}loadDocs()});
-function go(t){tab=t;try{localStorage.setItem("gg-stab",tab)}catch(e){}render()}
+function go(t){tab=t;picking=false;try{localStorage.setItem("gg-stab",tab)}catch(e){}render()}
 
 function chart(test,all,target){
   all=all.filter(t=>t.date&&num(t.total)!=null);if(!all.length)return "";
