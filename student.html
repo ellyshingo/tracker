@@ -80,8 +80,8 @@ a{color:var(--accent)}
 header .wrap{padding-block:0 6px}
 /* bottom nav + home */
 body{padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
-.bnav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
-.bnav button{font:inherit;font-size:11px;font-weight:500;border:0;background:none;color:var(--muted);display:grid;justify-items:center;gap:3px;padding:4px 0;cursor:pointer}
+.bnav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(6,1fr);background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
+.bnav button{font:inherit;font-size:10px;letter-spacing:-.2px;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:500;border:0;background:none;color:var(--muted);display:grid;justify-items:center;gap:3px;padding:4px 0;cursor:pointer}
 .bnav svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .bnav button[aria-current="page"]{color:var(--accent);font-weight:700}
 @media (min-width:820px){.bnav{max-width:760px;margin:0 auto;border:1px solid var(--line);border-bottom:0;border-radius:14px 14px 0 0}}
@@ -114,6 +114,8 @@ h2.sec{font-size:14px;margin:20px 0 8px;color:var(--fg)}
 .task{align-items:flex-start}
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
 
+.docup{display:grid;gap:10px;padding:14px}.docup label{display:grid;gap:4px;font-size:14px}.docup select,.docup input[type=file]{font:inherit;max-width:100%}
+.docrow{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}.docrow:last-child{border-bottom:0}.docrow .t{flex:1;min-width:0;overflow-wrap:anywhere}.docrow .da{display:flex;gap:6px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -140,7 +142,7 @@ const num=v=>{const n=parseFloat(String(v??"").replace(",","."));return isFinite
 const fmtScore=(t,v)=>v==null?"":(t==="IELTS"?Number(v).toFixed(1):String(v));
 const toast=m=>{const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2200)};
 let SB=null,D=null,tab="home";
-try{const t=localStorage.getItem("gg-stab");if(["home","schedule","unis","plan","tests"].includes(t))tab=t}catch(e){}
+try{const t=localStorage.getItem("gg-stab");if(["home","schedule","unis","plan","tests","docs"].includes(t))tab=t}catch(e){}
 
 function dueChip(a){if(SUBMITTED.has(a.status))return "";const d=daysLeft(a.deadline);if(d==null)return "";if(d<0)return '<span class="chip done">дедлайн прошёл</span>';
   return `<span class="chip ${d<=7?"crit":d<=21?"warn":""}">${d===0?"сегодня":d+" дн."}</span>`}
@@ -152,13 +154,13 @@ const initials=n=>String(n||"").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w
 const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")};
 const TASK_ST=["Не начато","В процессе","Готово"];
 const taskSt=t=>t.status||(t.done?"Готово":"Не начато");
-const ICONS={home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',schedule:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',unis:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',plan:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',tests:'<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>'};
-const TABS=[["home","Главная"],["schedule","Расписание"],["unis","Вузы"],["plan","План"],["tests","Тесты"]];
+const ICONS={home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',schedule:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',unis:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',plan:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',tests:'<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>',docs:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'};
+const TABS=[["home","Главная"],["schedule","Расписание"],["unis","Вузы"],["plan","План"],["tests","Тесты"],["docs","Документы"]];
 
 function render(){
   document.querySelectorAll("#bnav button").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===tab?"page":"false"));
-  $("#main").innerHTML=({home:vHome,schedule:vSchedule,unis:vUnis,plan:vTasks,tests:vTests}[tab]||vHome)();
-  bind();window.scrollTo(0,0);
+  $("#main").innerHTML=({home:vHome,schedule:vSchedule,unis:vUnis,plan:vTasks,tests:vTests,docs:vDocs}[tab]||vHome)();
+  bind();window.scrollTo(0,0);if(tab==="docs")loadDocs();
 }
 function todayClasses(){const dow=new Date().getDay();return (D.classes||[]).filter(c=>PATTERN_DAYS(c.pattern).includes(dow)).sort((a,b)=>String(a.start).localeCompare(String(b.start)))}
 function classRow(c){return `<div class="cls"><span class="dot ${ROOM_CLS(c.room)}"></span><div class="t"><b>${esc(c.subject)}</b><div class="sub">${esc([c.teacher,c.room&&("кабинет: "+c.room)].filter(Boolean).join(" · "))}</div></div><div class="tm">${esc(c.start||"")}–${esc(c.end||"")}</div></div>`}
@@ -240,6 +242,35 @@ function bind(){
   document.querySelectorAll("[data-tst]").forEach(b=>b.onclick=()=>{const t=D.tasks.find(x=>x.id===b.dataset.tst);if(!t)return;const nx=TASK_ST[(TASK_ST.indexOf(taskSt(t))+1)%3];b.disabled=true;const y=window.scrollY;setTask(t.id,nx).then(()=>window.scrollTo(0,y))});
 }
 document.addEventListener("submit",async e=>{if(e.target.id!=="pw-form")return;e.preventDefault();const b=e.target.querySelector("button");b.disabled=true;const {error}=await SB.auth.updateUser({password:$("#pw-new").value});b.disabled=false;if(error){toast(/weak|short|length/i.test(error.message)?"Пароль слишком простой — минимум 8 символов":"Не получилось сохранить пароль");return}e.target.reset();toast("Пароль сохранён")});
+
+/* --- документы: файлы лежат на Google Диске центра, доступ только через функцию drive --- */
+const DOC_TYPES_S=["Паспорт","Аттестат / транскрипт","Сертификат IELTS/SAT","Эссе","Согласие родителей","Портфолио","Финансовые документы","Другое"];
+const fmtSize=b=>b==null?"":b<1048576?Math.max(1,Math.round(b/1024))+" КБ":(b/1048576).toFixed(1).replace(".",",")+" МБ";
+async function driveCall(body,raw){
+  const cfg=window.TRACKER_CONFIG||{};const {data:{session}}=await SB.auth.getSession();const isF=body instanceof FormData;
+  let r;try{r=await fetch(String(cfg.SUPABASE_URL).replace(/\/+$/,"")+"/functions/v1/drive",{method:"POST",headers:{Authorization:"Bearer "+((session&&session.access_token)||""),apikey:cfg.SUPABASE_ANON_KEY,...(isF?{}:{"Content-Type":"application/json"})},body:isF?body:JSON.stringify(body)})}
+  catch(e){throw new Error("Нет связи. Проверьте интернет.")}
+  if(raw&&r.ok)return r;const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(r.status===404&&!d.error?"Раздел документов ещё не подключён. Сообщите куратору.":(d.error||"Ошибка "+r.status));return d}
+function vDocs(){return `<h1 class="ttl">Мои документы</h1><div class="sub" style="margin:-6px 0 12px">Загрузите сканы или фото — куратор увидит их сразу</div>
+  <form class="card docup" id="doc-form"><label>Что это за документ<select id="doc-cat">${DOC_TYPES_S.map(t=>`<option>${esc(t)}</option>`).join("")}</select></label>
+  <label>Файл (PDF, фото, Word — до 25 МБ)<input type="file" id="doc-file" multiple accept="image/*,application/pdf,.doc,.docx,.heic"></label>
+  <button class="btn primary" type="submit">Загрузить</button></form><div id="doc-list"><div class="card empty small">Загружаю…</div></div>`}
+async function loadDocs(){
+  const box=$("#doc-list");if(!box)return;let d;
+  try{d=await driveCall({action:"list"})}catch(e){box.innerHTML=`<div class="card empty small">${esc(e.message)}</div>`;return}
+  if(tab!=="docs"||!$("#doc-list"))return;
+  const groups={};d.files.forEach(f=>{const c=f.category||"Документы от куратора";(groups[c]=groups[c]||[]).push(f)});
+  box.innerHTML=d.files.length?Object.entries(groups).map(([c,fs])=>`<h2 class="sec">${esc(c)}</h2><div class="card">${fs.map(f=>`<div class="docrow"><div class="t"><b>${esc(f.name)}</b><div class="sub">${esc([fmtDate((f.modifiedTime||"").slice(0,10)),fmtSize(f.size),f.byStudent?"вы загрузили":"от куратора"].filter(Boolean).join(" · "))}</div></div><div class="da"><button class="btn small" data-ddl="${esc(f.id)}">Скачать</button>${f.byStudent?`<button class="btn small" data-ddel="${esc(f.id)}">Удалить</button>`:""}</div></div>`).join("")}</div>`).join(""):'<div class="card empty small">Документов пока нет.</div>';
+  box.querySelectorAll("[data-ddl]").forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await driveCall({action:"download",fileId:b.dataset.ddl},true);const name=decodeURIComponent(r.headers.get("x-file-name")||"файл");const url=URL.createObjectURL(await r.blob());const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){toast(e.message)}b.disabled=false});
+  box.querySelectorAll("[data-ddel]").forEach(b=>b.onclick=async()=>{if(!b.dataset.armed){b.dataset.armed="1";b.textContent="Точно?";setTimeout(()=>{delete b.dataset.armed;b.textContent="Удалить"},4000);return}
+    b.disabled=true;try{await driveCall({action:"delete",fileId:b.dataset.ddel});toast("Файл удалён");loadDocs()}catch(e){toast(e.message);b.disabled=false}});
+}
+document.addEventListener("submit",async e=>{if(e.target.id!=="doc-form")return;e.preventDefault();const fl=[...$("#doc-file").files];if(!fl.length){toast("Выберите файл");return}
+  const big=fl.find(f=>f.size>25*1024*1024);if(big){toast("«"+big.name+"» больше 25 МБ");return}
+  const b=e.target.querySelector("button");b.disabled=true;let n=0;
+  for(const f of fl){b.textContent="Загружаю "+(n+1)+"/"+fl.length+"…";const fd=new FormData();fd.append("action","upload");fd.append("category",$("#doc-cat").value);fd.append("file",f,f.name);try{await driveCall(fd);n++}catch(err){toast(f.name+": "+err.message)}}
+  b.disabled=false;b.textContent="Загрузить";if(n){toast("Загружено: "+n);e.target.reset()}loadDocs()});
 function go(t){tab=t;try{localStorage.setItem("gg-stab",tab)}catch(e){}render()}
 
 function chart(test,all,target){

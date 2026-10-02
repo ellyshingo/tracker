@@ -1,0 +1,6 @@
+.DS_Store
+private/
+*.private.sql
+.env
+*.secret
+supabase/.temp/

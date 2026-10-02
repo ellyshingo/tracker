@@ -188,6 +188,14 @@ tbody tr:hover .gcell{background:var(--surface)}
 .appsel{width:auto;padding:4px 6px;font-size:12.5px}
 .stud-mocks{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+.doc{display:grid;grid-template-columns:1fr auto auto auto;gap:8px 12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.doc .dn{min-width:0;overflow-wrap:anywhere}.doc select{max-width:190px}.dvis{display:flex!important;flex-direction:row!important;gap:6px;align-items:center;justify-content:flex-start;justify-self:start;white-space:nowrap;font-size:13px;color:var(--muted)}.dvis input{width:auto!important;margin:0}
+.dact{display:flex;gap:6px;flex-wrap:wrap}.dact .btn{text-decoration:none}
+.docs-up{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;border:1px dashed var(--line);border-radius:var(--radius);background:var(--surface-2)}
+.docs-up input[type=file]{flex:1;min-width:200px}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font:inherit;text-decoration:underline}
+.danger-zone{margin-top:22px;border-top:1px solid var(--line);padding-top:10px}.danger-zone summary{cursor:pointer;color:var(--crit)}
+@media (max-width:720px){.doc{grid-template-columns:1fr}.doc select{max-width:none}}
 </style>
 <style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <style>.rep{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111;line-height:1.4;max-width:800px;margin:0 auto}
@@ -414,18 +422,18 @@ function studentSheet(id,tab){
   if(!id)return profileSheetNew();
   CARD={id,tab:tab||CARD.id===id&&CARD.tab||"profile"};
   const s=studentOf(id);if(!s)return;
-  const tabs=[["profile","Профиль"],["tests","Тесты"],["portfolio","Портфолио"],["tasks","Задачи"],["unis","Вузы"],["meetings","Встречи"]];
+  const tabs=[["profile","Профиль"],["tests","Тесты"],["portfolio","Портфолио"],["tasks","Задачи"],["unis","Вузы"],["meetings","Встречи"],["docs","Документы"]];
   const nT=S.tasks.filter(t=>t.studentId===id&&!t.done).length,nA=S.apps.filter(a=>a.studentId===id).length;
   const badge={tasks:nT,unis:nA,tests:S.tests.filter(t=>t.studentId===id).length,meetings:S.meetings.filter(m=>m.studentId===id).length};
   openSheet(`<div class="card-head"><div><h3>${esc(s.name)}</h3><div class="sub">${esc([s.grade,s.intake,s.curator&&"куратор "+s.curator].filter(Boolean).join(" · "))}</div></div>
     <button class="btn primary" id="c-report" type="button">Отчёт</button><button class="btn" id="cancel" type="button">Закрыть</button></div>
     <nav class="ctabs">${tabs.map(([k,l])=>`<button type="button" data-ctab="${k}" aria-selected="${k===CARD.tab}">${l}${badge[k]?`<span class="n">${badge[k]}</span>`:""}</button>`).join("")}</nav>
-    <div id="card-body">${({profile:cProfile,tests:cTests,portfolio:cPortfolio,tasks:cTasks,unis:cUnis,meetings:cMeetings}[CARD.tab])(s)}</div>`,()=>{
+    <div id="card-body">${({profile:cProfile,tests:cTests,portfolio:cPortfolio,tasks:cTasks,unis:cUnis,meetings:cMeetings,docs:cDocs}[CARD.tab])(s)}</div>`,()=>{
     $(".sheet").classList.add("wide");
     $("#cancel").onclick=closeSheet;
     $("#c-report").onclick=()=>openReport(id);
     document.querySelectorAll("[data-ctab]").forEach(b=>b.onclick=()=>studentSheet(id,b.dataset.ctab));
-    ({profile:bProfile,tests:bTests,portfolio:bPortfolio,tasks:bTasks,unis:bUnis,meetings:bMeetings}[CARD.tab])(s);
+    ({profile:bProfile,tests:bTests,portfolio:bPortfolio,tasks:bTasks,unis:bUnis,meetings:bMeetings,docs:bDocs}[CARD.tab])(s);
   });
 }
 const refreshCard=async(...cols)=>{for(const c of cols)await reload(c);if(CARD.id&&$("#card-body"))studentSheet(CARD.id,CARD.tab)};
@@ -555,6 +563,56 @@ const cPortfolio=s=>`<fieldset class="fs"${ro()}><div class="grid">
 </div></fieldset>${S.canWrite?'<div class="actions"><span class="sp"></span><button class="btn primary" id="p-save">Сохранить</button></div>':""}
 <p class="note">Задачи «что нужно сделать до подачи» — во вкладке «Задачи».</p>`;
 function bPortfolio(s){if(!S.canWrite)return;$("#p-save").onclick=async()=>{try{await S.db.doc("students/"+s.id).update({doneList:$("#p-done").value.trim(),strengths:$("#p-str").value.trim(),weaknesses:$("#p-weak").value.trim(),curatorNotes:$("#p-notes").value.trim(),updatedAt:new Date().toISOString()});toast("Сохранено");await refreshCard("students")}catch(e){fail(e)}}}
+
+/* --- documents (Google Drive via Edge Function "drive") --- */
+const DOC_TYPES=["Паспорт","Аттестат / транскрипт","Сертификат IELTS/SAT","Рекомендательное письмо","Эссе","Согласие родителей","Портфолио","Финансовые документы","Другое"];
+const fmtSize=b=>b==null?"":b<1024*1024?Math.max(1,Math.round(b/1024))+" КБ":(b/1048576).toFixed(1).replace(".",",")+" МБ";
+async function driveCall(body,raw){
+  const cfg=window.TRACKER_CONFIG||{};const {data:{session}}=await SB.auth.getSession();const isF=body instanceof FormData;
+  let r;try{r=await fetch(String(cfg.SUPABASE_URL).replace(/\/+$/,"")+"/functions/v1/drive",{method:"POST",headers:{Authorization:"Bearer "+((session&&session.access_token)||""),apikey:cfg.SUPABASE_ANON_KEY,...(isF?{}:{"Content-Type":"application/json"})},body:isF?body:JSON.stringify(body)})}
+  catch(e){throw new Error("Нет связи с сервером документов. Проверьте интернет.")}
+  if(raw&&r.ok)return r;
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok){if(r.status===404&&!d.error)throw new Error("Документы ещё не подключены: в Supabase нет функции drive (см. инструкцию «Документы на Google Диске»).");throw new Error(d.error||d.message||("Ошибка "+r.status))}
+  return d;
+}
+async function driveDownload(body){const r=await driveCall({...body,action:"download"},true);const name=decodeURIComponent(r.headers.get("x-file-name")||"файл");const url=URL.createObjectURL(await r.blob());const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
+const cDocs=s=>`<div id="docs-box"><p class="note">Загружаю документы с Google Диска…</p></div>`;
+async function bDocs(s){
+  const box=$("#docs-box");if(!box)return;let d;
+  try{d=await driveCall({action:"list",studentId:s.id})}catch(e){box.innerHTML=`<p class="note" style="color:var(--crit)">${esc(e.message)}</p>`;return}
+  if(CARD.id!==s.id||CARD.tab!=="docs")return;
+  const groups={};d.files.forEach(f=>{(groups[f.category||"Без категории"]=groups[f.category||"Без категории"]||[]).push(f)});
+  const order=[...DOC_TYPES,"Без категории"];const cats=Object.keys(groups).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  const row=f=>`<div class="doc" data-doc="${esc(f.id)}"><div class="dn"><b>${esc(f.name)}</b><div class="sub">${esc([f.path&&("папка: "+f.path.replace(/ \/ $/,"")),fmtDate((f.modifiedTime||"").slice(0,10)),fmtSize(f.size),f.byStudent?"загрузил студент":""].filter(Boolean).join(" · "))}</div></div>
+    <select data-dcat="${esc(f.id)}" aria-label="Категория"${ro()}>${opts(["",...DOC_TYPES],f.category,false)}</select>
+    <label class="dvis"><input type="checkbox" data-dvis="${esc(f.id)}"${f.visible?" checked":""}${ro()}> видно студенту</label>
+    <span class="dact"><button class="btn" type="button" data-ddl="${esc(f.id)}">Скачать</button>${f.link?`<a class="btn" href="${esc(f.link)}" target="_blank" rel="noopener">Диск ↗</a>`:""}${S.canWrite?`<button class="btn danger" type="button" data-ddel="${esc(f.id)}">Удалить</button>`:""}</span></div>`;
+  box.innerHTML=`${d.folderId?`<p class="note" style="margin-top:0">Папка студента: <a href="${esc(d.folderUrl)}" target="_blank" rel="noopener">открыть на Google Диске ↗</a>${S.canWrite?` · <button class="linkbtn" type="button" id="d-unlink">отвязать</button>`:""}</p>`:
+    `<div class="docs-empty"><p class="note" style="margin-top:0">У студента ещё нет папки на Диске. Создайте новую или привяжите папку, где уже лежат его документы (она должна быть на Диске центра или открыта ему с правом редактирования).</p>
+    ${S.canWrite?`<div class="actions" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn primary" type="button" id="d-create">Создать папку</button><input id="d-link" placeholder="или вставьте ссылку на папку Google Диска" style="flex:1;min-width:220px"><button class="btn" type="button" id="d-linkbtn">Привязать</button></div>`:""}</div>`}
+    ${S.canWrite?`<div class="docs-up"><select id="d-cat" aria-label="Категория">${opts(DOC_TYPES,"Паспорт",false)}</select><label class="dvis"><input type="checkbox" id="d-vis"> видно студенту</label><input type="file" id="d-file" multiple><button class="btn primary" type="button" id="d-upload">Загрузить</button></div>
+    <p class="note">До 25 МБ на файл. Файлы ложатся в папку студента на Диске центра. Рекомендательные письма не отмечайте «видно студенту».</p>`:""}
+    ${d.files.length?cats.map(c=>`<div class="sec" style="margin-top:14px">${esc(c)} <span class="sub">${groups[c].length}</span></div>${groups[c].map(row).join("")}`).join(""):`<p class="note">${d.folderId?"В папке пока нет файлов.":""}</p>`}
+    ${S.canWrite&&d.folderId?`<details class="danger-zone"><summary>Удалить все документы студента (после поступления)</summary><p class="note">Папка целиком уйдёт в корзину Google Диска и через 30 дней удалится навсегда. Чтобы подтвердить, впишите слово УДАЛИТЬ.</p><div class="actions" style="justify-content:flex-start"><input id="d-purge-txt" placeholder="УДАЛИТЬ" style="max-width:160px"><button class="btn danger" type="button" id="d-purge">Удалить всё</button></div></details>`:""}`;
+  const again=()=>bDocs(s);
+  const busy=(b,on)=>{if(b){b.disabled=on}};
+  const act=async(btn,body,msg)=>{busy(btn,true);try{await driveCall({studentId:s.id,...body});msg&&toast(msg);await again()}catch(e){toast(e.message);busy(btn,false)}};
+  box.querySelectorAll("[data-ddl]").forEach(b=>b.onclick=async()=>{busy(b,true);try{await driveDownload({studentId:s.id,fileId:b.dataset.ddl})}catch(e){toast(e.message)}busy(b,false)});
+  if(!S.canWrite)return;
+  $("#d-create")&&($("#d-create").onclick=e=>act(e.target,{action:"create"},"Папка создана"));
+  $("#d-linkbtn")&&($("#d-linkbtn").onclick=e=>{const v=val("d-link");if(!v){toast("Вставьте ссылку на папку");return}act(e.target,{action:"link",folder:v},"Папка привязана")});
+  $("#d-unlink")&&($("#d-unlink").onclick=e=>{if(!confirmTwice(e.target,"точно отвязать?"))return;act(e.target,{action:"unlink"},"Папка отвязана — файлы остались на Диске")});
+  $("#d-upload").onclick=async e=>{const fl=[...$("#d-file").files];if(!fl.length){toast("Выберите файл");return}const big=fl.find(f=>f.size>25*1024*1024);if(big){toast("«"+big.name+"» больше 25 МБ");return}
+    busy(e.target,true);let okN=0;for(const f of fl){e.target.textContent="Загружаю "+(okN+1)+"/"+fl.length+"…";const fd=new FormData();fd.append("action","upload");fd.append("studentId",s.id);fd.append("category",val("d-cat"));fd.append("visible",$("#d-vis").checked?"1":"0");fd.append("file",f,f.name);
+      try{await driveCall(fd);okN++}catch(err){toast(f.name+": "+err.message)}}
+    if(okN)toast("Загружено файлов: "+okN);await again()};
+  box.querySelectorAll("[data-dvis]").forEach(c=>c.onchange=async()=>{c.disabled=true;try{await driveCall({action:"visibility",studentId:s.id,fileId:c.dataset.dvis,visible:c.checked});toast(c.checked?"Студент видит файл":"Файл скрыт от студента")}catch(e){c.checked=!c.checked;toast(e.message)}c.disabled=false});
+  box.querySelectorAll("[data-dcat]").forEach(c=>c.onchange=()=>act(c,{action:"category",fileId:c.dataset.dcat,category:c.value},"Категория изменена"));
+  box.querySelectorAll("[data-ddel]").forEach(b=>b.onclick=()=>{if(!confirmTwice(b,"Точно?"))return;act(b,{action:"delete",fileId:b.dataset.ddel},"Файл в корзине Диска")});
+  $("#d-purge")&&($("#d-purge").onclick=e=>{if(val("d-purge-txt")!=="УДАЛИТЬ"){toast("Впишите УДАЛИТЬ заглавными буквами");return}act(e.target,{action:"purge",confirm:"УДАЛИТЬ"},"Все документы студента удалены")});
+}
+function confirmTwice(b,label){if(b.dataset.armed)return true;const t=b.textContent;b.dataset.armed="1";b.textContent=label;setTimeout(()=>{delete b.dataset.armed;b.textContent=t},4000);return false}
 
 /* --- tasks --- */
 function taskRow(t){const d=daysLeft(t.due);const late=!t.done&&d!=null&&d<0;
