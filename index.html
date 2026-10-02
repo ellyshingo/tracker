@@ -196,6 +196,9 @@ tbody tr:hover .gcell{background:var(--surface)}
 .linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font:inherit;text-decoration:underline}
 .danger-zone{margin-top:22px;border-top:1px solid var(--line);padding-top:10px}.danger-zone summary{cursor:pointer;color:var(--crit)}
 @media (max-width:720px){.doc{grid-template-columns:1fr}.doc select{max-width:none}}
+.af-row{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,220px);gap:8px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.af-row .n{min-width:0;overflow-wrap:anywhere}.af-row select{width:100%;min-width:0}
+@media (max-width:520px){.af-row{grid-template-columns:auto minmax(0,1fr)}.af-row select{grid-column:2}}
 </style>
 <style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <style>.rep{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#111;line-height:1.4;max-width:800px;margin:0 auto}
@@ -350,7 +353,7 @@ function vStudents(){
     <select id="f-sint"><option value="">Все сезоны</option>${opts(INTAKES,f.sint,false)}</select>
     <select id="f-stype"><option value="">Все типы</option>${opts(STYPE,f.stype,false)}</select>
     <select id="f-scur"><option value="">Все кураторы</option>${opts(S.lists.curators,f.scur,false)}</select>
-    ${S.canWrite?'<button class="btn primary" id="add-student">+ Студент</button>':""}</div>
+    ${S.canWrite?'<button class="btn" id="auto-folders" title="Найти папки студентов на Google Диске по имени и привязать">Папки на Диске</button><button class="btn primary" id="add-student">+ Студент</button>':""}</div>
     <div class="tablebox">${S.students.length?`<table><thead><tr><th>Студент</th><th>Класс / тип</th><th>Куратор</th><th>Документы</th><th class="num">IELTS</th><th class="num">SAT</th><th class="num">ОРТ</th><th class="num">Заявок</th><th>Страны</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="empty">Никто не подходит под фильтр.</td></tr>'}</tbody></table>`
       :`<div class="empty"><b>${S.ready.students?"Студентов пока нет":"Загружаю студентов…"}</b>${S.ready.students?"Нажмите «+ Студент», чтобы добавить первого.":""}</div>`}</div>`;
 }
@@ -611,6 +614,63 @@ async function bDocs(s){
   box.querySelectorAll("[data-dcat]").forEach(c=>c.onchange=()=>act(c,{action:"category",fileId:c.dataset.dcat,category:c.value},"Категория изменена"));
   box.querySelectorAll("[data-ddel]").forEach(b=>b.onclick=()=>{if(!confirmTwice(b,"Точно?"))return;act(b,{action:"delete",fileId:b.dataset.ddel},"Файл в корзине Диска")});
   $("#d-purge")&&($("#d-purge").onclick=e=>{if(val("d-purge-txt")!=="УДАЛИТЬ"){toast("Впишите УДАЛИТЬ заглавными буквами");return}act(e.target,{action:"purge",confirm:"УДАЛИТЬ"},"Все документы студента удалены")});
+}
+/* --- автопривязка папок: в корне Диска папки названы по имени латиницей (Abdualim), написание бывает разное --- */
+const TRANSLIT={а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"y",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"kh",ц:"ts",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya",ө:"o",ү:"u",ң:"ng",ә:"a",қ:"k",ғ:"g",һ:"h",і:"i"};
+// Кириллицу и латиницу приводим к одному «звучанию»: Абдуалим, Abdualim, Abdualeem, Abdualym → abdualim; Айжан, Aizhan, Aijan → aijan
+const nameKey=w=>String(w||"").toLowerCase().replace(/[а-яёөүңәқғһі]/g,c=>TRANSLIT[c]).normalize("NFD").replace(/[^a-z]/g,"")
+  .replace(/dzh|dj/g,"j").replace(/zh/g,"j").replace(/kh/g,"h").replace(/ph/g,"f").replace(/shch|sch/g,"sh").replace(/q/g,"k").replace(/x/g,"ks").replace(/w/g,"v").replace(/c(?!h)/g,"k")
+  .replace(/ee/g,"i").replace(/oo|ou/g,"u").replace(/y/g,"i").replace(/(.)\1+/g,"$1");
+const nameTokens=s=>String(s||"").split(/[^\p{L}\p{N}]+/u).filter(t=>t&&!/\d/.test(t)).map(nameKey).filter(t=>t.length>=2);
+function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
+const tokSim=(a,b)=>{const L=Math.max(a.length,b.length);if(!L)return 0;const s=1-lev(a,b)/L;return L<=4&&a!==b?s-.15:s};
+// Насколько папка похожа на студента: лучшее совпадение слов + небольшой бонус, если совпало несколько слов (имя и фамилия)
+function folderScore(fToks,sToks){let best=0,hits=0;fToks.forEach(f=>{const m=Math.max(0,...sToks.map(s=>tokSim(f,s)));best=Math.max(best,m);if(m>=.8)hits++});return best+(hits>1?.05*(hits-1):0)}
+function matchFolders(students,folders){
+  const ft=folders.map(f=>nameTokens(f.name)),st=students.map(s=>nameTokens(s.name));
+  const sc=students.map((s,i)=>folders.map((f,j)=>folderScore(ft[j],st[i])));
+  const pairs=[];sc.forEach((row,i)=>row.forEach((v,j)=>{if(v>=.7)pairs.push([v,i,j])}));pairs.sort((a,b)=>b[0]-a[0]);
+  const usedS=new Set(),usedF=new Set(),pick={};
+  pairs.forEach(([v,i,j])=>{if(usedS.has(i)||usedF.has(j))return;usedS.add(i);usedF.add(j);
+    // «несколько вариантов»: та же папка почти так же похожа на другого студента, или у студента есть почти такая же другая папка
+    const rival=sc.some((r,k)=>k!==i&&r[j]>=v-.05)||sc[i].some((x,k)=>k!==j&&x>=v-.05);
+    pick[students[i].id]={folder:folders[j],score:v,rival}});
+  return {pick,sc};
+}
+async function autoFoldersSheet(){
+  openSheet(`<h3>Папки студентов на Диске</h3><div id="af-box"><p class="note">Смотрю папки на Google Диске…</p></div>`);
+  let d;try{d=await driveCall({action:"folders"})}catch(e){const b=$("#af-box");if(b)b.innerHTML=`<p class="note" style="color:var(--crit)">${esc(e.message)}</p>`;return}
+  const box=$("#af-box");if(!box)return;
+  const linkedIds=new Set(S.students.map(s=>s.drive_folder_id).filter(Boolean));
+  const folders=d.folders.filter(f=>!linkedIds.has(f.id)).sort((a,b)=>a.name.localeCompare(b.name,"ru"));
+  const studs=S.students.filter(s=>!s.drive_folder_id).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ru"));
+  const done=S.students.length-studs.length;
+  if(!studs.length){box.innerHTML=`<p class="note" style="margin-top:0">У всех студентов (${done}) папка уже привязана.</p><div class="actions"><span class="sp"></span><button class="btn" id="cancel">Закрыть</button></div>`;$("#cancel").onclick=closeSheet;return}
+  const {pick,sc}=matchFolders(studs,folders);
+  const used=new Set(Object.values(pick).map(p=>p.folder.id));
+  const row=(s,i)=>{const p=pick[s.id];const sure=p&&!p.rival&&p.score>=.85;
+    const cands=folders.map((f,j)=>[sc[i][j],f]).filter(([v])=>v>=.5).sort((a,b)=>b[0]-a[0]).slice(0,6).map(x=>x[1]);
+    const o=f=>`<option value="${esc(f.id)}"${p&&p.folder.id===f.id?" selected":""}>${esc(f.name)}</option>`;
+    const chip=!p?'<span class="chip">не нашлось</span>':p.rival?'<span class="chip warn">несколько вариантов — проверьте</span>':p.score>=.95?'<span class="chip good">совпадает</span>':'<span class="chip warn">похоже — проверьте</span>';
+    return `<div class="af-row"><input type="checkbox" data-afchk="${esc(s.id)}" aria-label="Привязать"${sure?" checked":""}><div class="n"><b>${esc(s.name)}</b> ${chip}</div>
+      <select data-afsel="${esc(s.id)}" aria-label="Папка для ${esc(s.name)}"><option value="">— не привязывать —</option>${cands.length?`<optgroup label="Похожие">${cands.map(o).join("")}</optgroup>`:""}<optgroup label="Все папки">${folders.filter(f=>!cands.includes(f)).map(o).join("")}</optgroup></select></div>`};
+  const spare=folders.filter(f=>!used.has(f.id));
+  box.innerHTML=`<p class="note" style="margin-top:0">Трекер сравнил имена студентов с названиями папок в корневой папке Диска с учётом разного написания латиницей. Отмечены только уверенные совпадения. Остальные проверьте, выберите папку и поставьте галочку.${done?` Уже привязано: ${done}.`:""}</p>
+    ${folders.length?"":`<p class="note" style="color:var(--crit)">В корневой папке нет свободных папок.</p>`}
+    <div>${studs.map(row).join("")}</div>
+    ${spare.length?`<p class="note">Папки, для которых не нашлось студента (${spare.length}): ${esc(spare.map(f=>f.name).join(", "))}</p>`:""}
+    <div class="actions"><span class="sp"></span><button class="btn" id="cancel">Отмена</button><button class="btn primary" id="af-go">Привязать</button></div>`;
+  const count=()=>{const n=box.querySelectorAll("[data-afchk]:checked").length;$("#af-go").textContent=n?`Привязать ${n}`:"Привязать"};
+  box.querySelectorAll("[data-afsel]").forEach(sel=>sel.onchange=()=>{box.querySelector(`[data-afchk="${CSS.escape(sel.dataset.afsel)}"]`).checked=!!sel.value;count()});
+  box.querySelectorAll("[data-afchk]").forEach(c=>c.onchange=()=>{if(c.checked&&!box.querySelector(`[data-afsel="${CSS.escape(c.dataset.afchk)}"]`).value){c.checked=false;toast("Сначала выберите папку")}count()});
+  count();$("#cancel").onclick=closeSheet;
+  $("#af-go").onclick=async e=>{
+    const todo=[...box.querySelectorAll("[data-afchk]:checked")].map(c=>({sid:c.dataset.afchk,fid:box.querySelector(`[data-afsel="${CSS.escape(c.dataset.afchk)}"]`).value})).filter(x=>x.fid);
+    if(!todo.length){toast("Отметьте, кого привязать");return}
+    const seen={};for(const t of todo){if(seen[t.fid]){const f=folders.find(x=>x.id===t.fid);toast(`Папка «${f?f.name:""}» выбрана для двух студентов: ${studentName(seen[t.fid])} и ${studentName(t.sid)}`);return}seen[t.fid]=t.sid}
+    const btn=e.target;btn.disabled=true;let okN=0;
+    for(const t of todo){btn.textContent=`Привязываю ${okN+1}/${todo.length}…`;try{await driveCall({action:"link",studentId:t.sid,folder:t.fid});okN++}catch(err){toast(studentName(t.sid)+": "+err.message)}}
+    toast(`Привязано папок: ${okN}`);await reload("students");autoFoldersSheet()};
 }
 function confirmTwice(b,label){if(b.dataset.armed)return true;const t=b.textContent;b.dataset.armed="1";b.textContent=label;setTimeout(()=>{delete b.dataset.armed;b.textContent=t},4000);return false}
 
@@ -1040,7 +1100,7 @@ function bindView(){
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
   on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
   [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{S.f[k]=e.target.value;render()}));
-  on("#add-student","click",()=>studentSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
+  on("#add-student","click",()=>studentSheet());on("#auto-folders","click",()=>autoFoldersSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
   document.querySelectorAll("#main [data-open-student]").forEach(el=>el.addEventListener("click",e=>{e.preventDefault();studentSheet(el.dataset.openStudent)}));
   document.querySelectorAll("#main [data-cell]").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();statusMenu(el)}));

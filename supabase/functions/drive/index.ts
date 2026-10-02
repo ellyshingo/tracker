@@ -7,7 +7,7 @@
 // SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY Supabase добавляет сам.
 //
 // Кто что может:
-//   куратор — всё: создать/привязать папку, загрузить, скачать, показать/скрыть от студента, удалить, удалить всё;
+//   куратор — всё: создать/привязать папку (в том числе списком — action "folders"), загрузить, скачать, показать/скрыть от студента, удалить, удалить всё;
 //   студент — только своя папка: видит файлы, отмеченные «видно студенту», загружает,
 //             удаляет только то, что загрузил сам. Рекомендательные письма и т.п. куратор просто не открывает студенту.
 
@@ -171,6 +171,15 @@ async function handler(req) {
     const form = isForm ? await req.formData() : null;
     const body = form ? Object.fromEntries([...form.entries()].filter(([, v]) => typeof v === "string")) : await req.json().catch(() => ({}));
     const action = String(body.action || "");
+
+    // Папки в корневой папке центра — для автопривязки по имени (сопоставляет сам трекер, куратор подтверждает).
+    if (action === "folders") {
+      if ((await rpc("tracker_is_staff", {}, auth)) !== true) deny("Только для кураторов");
+      const root = env("DRIVE_ROOT_FOLDER_ID"); if (!root) throw new HttpError(500, "Не задан секрет DRIVE_ROOT_FOLDER_ID");
+      const folders = (await listChildren(root)).filter((f) => f.mimeType === FOLDER).map((f) => ({ id: f.id, name: f.name }));
+      return json({ folders });
+    }
+
     const acc = await rpc("drive_access", { sid: body.studentId || null }, auth);
     if (!acc) deny("Нет доступа к этому студенту");
     const staff = acc.role === "staff";

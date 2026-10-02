@@ -16,6 +16,7 @@ globalThis.fetch=async(url,init={})=>{url=String(url);const J=(o,s=200)=>new Res
  if(url.startsWith("https://oauth2")){tokenCalls++;return J({access_token:"tok",expires_in:3600})}
  if(url.startsWith("https://sb/rest/v1/rpc/")){const fn=url.split("/").pop();const u=users[init.headers.Authorization];const a=JSON.parse(init.body);
    if(!u)return J({message:"jwt"},401);
+   if(fn==="tracker_is_staff")return J(u.role==="staff");
    if(fn==="drive_access"){let sid=a.sid;if(u.role!=="staff"){if(sid&&sid!==u.sid)return J(null);sid=u.sid}const s=students[sid];if(!s)return J(null);return J({role:u.role,id:s.id,name:s.name,folderId:s.folder,email:u.email})}
    if(fn==="drive_set_folder"){if(u.role!=="staff")return J({message:"not allowed"},403);students[a.sid].folder=a.fid;return J(null)}}
  if(url.startsWith("https://sb/rest/v1/tracker_students")){if(init.headers.Authorization!=="Bearer svc")return J({},401);const id=decodeURIComponent(url.split("eq.")[1]);students[id].folder=JSON.parse(init.body).drive_folder_id;return new Response(null,{status:204})}
@@ -40,6 +41,9 @@ r=await call("Bearer B",{action:"download",fileId:"other"});ok(r.s===403,"studen
 r=await call("Bearer C",{action:"download",studentId:"b",fileId:"other"});ok(r.s===403,"staff cannot download outside-folder via student b");
 r=await call("Bearer B",{action:"download",fileId:"gdoc"});ok(r.s===200&&r.d==="PDF-Эссе"&&decodeURIComponent(r.h.get("x-file-name"))==="Эссе.pdf","google doc exported to pdf");
 r=await call("Bearer C",{action:"download",studentId:"b",fileId:"pass"});ok(r.s===200&&r.d==="DATA-Паспорт.jpg","staff downloads nested file");
+r=await call("Bearer C",{action:"folders"});ok(r.s===200&&r.d.folders.length===1&&r.d.folders[0].id==="FB"&&r.d.folders[0].name==="Бермет","staff lists root folders only (no files, no subfolders)");
+r=await call("Bearer A",{action:"folders"});ok(r.s===403,"student cannot list root folders");
+r=await call("Bearer C",{action:"link",studentId:"a",folder:"FBFBFBFBFBFB"});ok(r.s===404,"link by bare unknown id → 404");
 r=await call("Bearer A",{action:"list",studentId:"b"});ok(r.s===403,"student a cannot list b");
 r=await call("Bearer A",{action:"list"});ok(r.s===200&&r.d.folderId===null,"a no folder yet");
 r=await call("Bearer A",{action:"create"});ok(r.s===403,"student cannot create via action");
