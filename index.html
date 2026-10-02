@@ -109,6 +109,7 @@ h2{font-size:15px;margin:0 0 10px;font-weight:600;text-wrap:balance}
 .grid .full{grid-column:1/-1}
 @media (max-width:480px){.grid{grid-template-columns:1fr}}
 label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;min-width:0}
+details.more{grid-column:1/-1;border-top:1px solid var(--line);margin-top:6px;padding-top:4px}details.more>summary{cursor:pointer;font-weight:600;color:var(--accent);padding:8px 0}details.more>.grid{margin-top:6px}
 .sec{grid-column:1/-1;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);font-weight:600;margin-top:8px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;align-items:center}
 .actions .sp{flex:1}
@@ -235,7 +236,7 @@ tbody tr:hover .gcell{background:var(--surface)}
 <script>
 (() => {
 const COUNTRIES=["США","Великобритания","Канада","Сингапур","Гонконг","Китай","Южная Корея","Япония","Нидерланды","Германия","Венгрия","Италия","ОАЭ","Катар","Малайзия","Турция","Другое"];
-const ROUNDS=["ED","ED2","EA","REA","RD","Rolling","UCAS","Стипендия","Другое"];
+const ROUNDS=["Early","Regular","Rolling"]; // как в student.html и tracker_valid_round() (миграция 009)
 const WORK=["Не начато","В работе","На проверке","Готово","Не нужно"];
 const CHECK=[["essay","Основное эссе"],["recs","Рекомендации"],["transcript","Транскрипт / оценки"],["tests","Результаты тестов"],["translation","Перевод документов"],["finance","Финансовые документы"]];
 const ST_SHORT={"Планируем":"План","Готовим":"Готовим","Подано":"Подано","Интервью":"Интервью","Принят":"Принят","Лист ожидания":"Лист ож.","Отказ":"Отказ","Отозвано":"Отозвано"};
@@ -425,7 +426,7 @@ function studentSheet(id,tab){
   if(!id)return profileSheetNew();
   CARD={id,tab:tab||CARD.id===id&&CARD.tab||"profile"};
   const s=studentOf(id);if(!s)return;
-  const tabs=[["profile","Профиль"],["tests","Тесты"],["portfolio","Портфолио"],["tasks","Задачи"],["unis","Вузы"],["meetings","Встречи"],["docs","Документы"]];
+  const tabs=[["profile","Профиль"],["tests","Тесты"],["portfolio","Для отчёта"],["tasks","Задачи"],["unis","Вузы"],["meetings","Встречи"],["docs","Документы"]];
   const nT=S.tasks.filter(t=>t.studentId===id&&!t.done).length,nA=S.apps.filter(a=>a.studentId===id).length;
   const badge={tasks:nT,unis:nA,tests:S.tests.filter(t=>t.studentId===id).length,meetings:S.meetings.filter(m=>m.studentId===id).length};
   openSheet(`<div class="card-head"><div><h3>${esc(s.name)}</h3><div class="sub">${esc([s.grade,s.intake,s.curator&&"куратор "+s.curator].filter(Boolean).join(" · "))}</div></div>
@@ -454,20 +455,19 @@ function profileFields(s){return `<div class="grid">
     <label class="full">Целевые страны<textarea id="s-countries" style="min-height:52px">${esc(s.countries)}</textarea></label>
     <div class="sec">Общие документы (одни на все вузы)</div>
     ${CHECK.map(([k,l])=>`<label>${l}<select id="c-${k}">${opts(WORK,((s.checklist||{})[k])||"Не начато",false)}</select></label>`).join("")}
-    <div class="sec">Баллы <span class="sub" style="text-transform:none;letter-spacing:0">— обновляются сами из официальных тестов</span></div>
-    <label>IELTS<input id="s-ielts" inputmode="decimal" value="${esc(s.ielts)}"></label>
-    <label>TOEFL<input id="s-toefl" inputmode="numeric" value="${esc(s.toefl)}"></label>
-    <label>SAT<input id="s-sat" inputmode="numeric" value="${esc(s.sat)}"></label>
-    <label>ОРТ<input id="s-ort" inputmode="numeric" value="${esc(s.ort)}"></label>
+    <div class="sec">Баллы <span class="sub" style="text-transform:none;letter-spacing:0">— лучший официальный результат из вкладки «Тесты»; пока официальных тестов нет, можно вписать вручную</span></div>
+    ${[["IELTS","ielts","decimal"],["TOEFL","toefl","numeric"],["SAT","sat","numeric"],["ОРТ","ort","numeric"]].map(([t,f,im])=>{const b=s.id&&bestOfficial(s.id,t);
+      return b?`<label>${t} <span class="sub">из тестов</span><input id="s-${f}" value="${esc(fmtScore(t,num(b.total)))}" readonly title="Официальный тест от ${fmtDate(b.date)} — меняется во вкладке «Тесты»"></label>`
+        :`<label>${t}<input id="s-${f}" inputmode="${im}" value="${esc(s[f])}"></label>`}).join("")}
     <label>GPA<input id="s-gpa" value="${esc(s.gpa)}"></label>
     <div class="sec">Контакты</div>
     <label class="full">Email студента для личного кабинета <span class="sub">— по нему студент входит на student.html и видит только свои вузы, задачи и баллы</span><input id="s-semail" type="email" value="${esc(s.studentEmail)}" placeholder="student@gmail.com"></label>
     <label>Телефон / Telegram<input id="s-contact" value="${esc(s.contact)}"></label>
     <label>Родитель<input id="s-parent" value="${esc(s.parent)}"></label>
-    <label class="full">Заметки<textarea id="s-notes">${esc(s.notes)}</textarea></label>
+    <p class="full note">Заметки о студенте ведите в журнале «Встречи»; то, что пойдёт в отчёт, — во вкладке «Для отчёта».</p>
   </div>`}
 const profileData=()=>({name:val("s-name"),checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
-  ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),studentEmail:val("s-semail").toLowerCase(),parent:val("s-parent"),notes:val("s-notes"),updatedAt:new Date().toISOString()});
+  ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),studentEmail:val("s-semail").toLowerCase(),parent:val("s-parent"),updatedAt:new Date().toISOString()});
 function profileSheetNew(){
   openSheet(`<h3>Новый студент</h3><fieldset class="fs"${ro()}>${profileFields({type:"Поступление",status:"Активен"})}</fieldset>${actions(true)}`,()=>{
     $("#cancel").onclick=closeSheet;if(!S.canWrite)return;
@@ -526,8 +526,8 @@ function cTests(s){
   <fieldset class="fs"${ro()}><div class="grid">${["IELTS","SAT","TOEFL","Duolingo","ОРТ"].map(k=>`<label>${k}<input id="g-${k}" inputmode="decimal" value="${esc(targets[k]??"")}"></label>`).join("")}</div></fieldset>
   <div class="sec">Другие показатели для отчёта <span class="sub" style="text-transform:none;letter-spacing:0">— GPA, достижения, статус абитуриента, «SAT: не сдавал»…</span></div>
   <fieldset class="fs"${ro()}><div id="m-rows">${(s.metrics||[]).map((m,i)=>metricRow(m,i)).join("")}</div>
-  ${S.canWrite?'<button class="btn" id="m-add" type="button">+ Показатель</button>':""}
-  <label style="margin-top:12px">Стратегия по тестам (абзац в отчёте)<textarea id="m-strategy">${esc(s.strategy)}</textarea></label></fieldset>
+  ${S.canWrite?'<button class="btn" id="m-add" type="button">+ Показатель</button>':""}</fieldset>
+  <p class="note">Стратегия по тестам — во вкладке «Для отчёта».</p>
   ${S.canWrite?'<div class="actions"><span class="sp"></span><button class="btn primary" id="m-save">Сохранить цели и показатели</button></div>':""}`;
 }
 const metricRow=(m,i)=>`<div class="mrow"><input placeholder="Показатель" data-m="label" value="${esc(m.label)}"><input placeholder="Результат" data-m="result" value="${esc(m.result)}"><textarea placeholder="Комментарий" data-m="comment">${esc(m.comment)}</textarea>${S.canWrite?'<button class="btn" type="button" data-mdel title="Удалить">×</button>':""}</div>`;
@@ -552,7 +552,7 @@ function bTests(s){
   $("#m-save").onclick=async()=>{
     const metrics=[...rows.children].map(r=>({label:r.querySelector('[data-m="label"]').value.trim(),result:r.querySelector('[data-m="result"]').value.trim(),comment:r.querySelector('[data-m="comment"]').value.trim()})).filter(m=>m.label||m.result);
     const targets={};["IELTS","SAT","TOEFL","Duolingo","ОРТ"].forEach(k=>{const v=val("g-"+k);if(v)targets[k]=v});
-    try{await S.db.doc("students/"+s.id).update({metrics,targets,strategy:val("m-strategy"),updatedAt:new Date().toISOString()});toast("Сохранено");await refreshCard("students")}catch(e){fail(e)}};
+    try{await S.db.doc("students/"+s.id).update({metrics,targets,updatedAt:new Date().toISOString()});toast("Сохранено");await refreshCard("students")}catch(e){fail(e)}};
 }
 async function syncBest(sid){const s=studentOf(sid);if(!s)return;const upd={};Object.entries(TEST_FIELD).forEach(([t,f])=>{const b=bestOfficial(sid,t);if(b&&String(b.total)!==String(s[f]||""))upd[f]=String(b.total)});
   if(Object.keys(upd).length){try{await S.db.doc("students/"+sid).update(upd);await reload("students")}catch(e){}}}
@@ -562,10 +562,11 @@ const cPortfolio=s=>`<fieldset class="fs"${ro()}><div class="grid">
   <label class="full">Что уже сделано <span class="sub">— каждый пункт с новой строки</span><textarea id="p-done" style="min-height:110px">${esc(s.doneList)}</textarea></label>
   <label class="full">Сильные стороны<textarea id="p-str">${esc(s.strengths)}</textarea></label>
   <label class="full">Слабые места<textarea id="p-weak">${esc(s.weaknesses)}</textarea></label>
+  <label class="full">Стратегия по тестам <span class="sub">— абзац в отчёте</span><textarea id="p-strategy">${esc(s.strategy)}</textarea></label>
   <label class="full">Заметки куратора для отчёта <span class="sub">— абзацы; «Заголовок: текст» выделит заголовок жирным</span><textarea id="p-notes" style="min-height:90px">${esc(s.curatorNotes)}</textarea></label>
 </div></fieldset>${S.canWrite?'<div class="actions"><span class="sp"></span><button class="btn primary" id="p-save">Сохранить</button></div>':""}
-<p class="note">Задачи «что нужно сделать до подачи» — во вкладке «Задачи».</p>`;
-function bPortfolio(s){if(!S.canWrite)return;$("#p-save").onclick=async()=>{try{await S.db.doc("students/"+s.id).update({doneList:$("#p-done").value.trim(),strengths:$("#p-str").value.trim(),weaknesses:$("#p-weak").value.trim(),curatorNotes:$("#p-notes").value.trim(),updatedAt:new Date().toISOString()});toast("Сохранено");await refreshCard("students")}catch(e){fail(e)}}}
+<p class="note">Всё на этой вкладке попадает в отчёт для студента и родителей. Рабочие заметки — в «Встречах», задачи — в «Задачах».</p>`;
+function bPortfolio(s){if(!S.canWrite)return;$("#p-save").onclick=async()=>{try{await S.db.doc("students/"+s.id).update({doneList:$("#p-done").value.trim(),strengths:$("#p-str").value.trim(),weaknesses:$("#p-weak").value.trim(),curatorNotes:$("#p-notes").value.trim(),strategy:$("#p-strategy").value.trim(),updatedAt:new Date().toISOString()});toast("Сохранено");await refreshCard("students")}catch(e){fail(e)}}}
 
 /* --- documents (Google Drive via Edge Function "drive") --- */
 const DOC_TYPES=["Паспорт","Аттестат / транскрипт","Сертификат IELTS/SAT","Рекомендательное письмо","Эссе","Согласие родителей","Портфолио","Финансовые документы","Другое"];
@@ -901,25 +902,26 @@ function appSheet(id){
     <label class="full">Программа<input id="a-prog" value="${esc(a.program)}"></label>
     <label>Тип подачи<select id="a-round">${opts(ROUNDS,a.round)}</select></label>
     <label>Статус заявки<select id="a-status">${opts(STATUS,a.status,false)}</select></label>
-    <label>Категория (для отчёта)<select id="a-tier">${opts(TIERS,a.tier)}</select></label>
-    <label class="full">Примечание для этого студента (добавится к «Финансовой поддержке» в отчёте)<textarea id="a-note" style="min-height:52px">${esc(a.note)}</textarea></label>
-    <div class="sec">Для отчёта этого студента <span class="sub" style="text-transform:none;letter-spacing:0">— если пусто, берётся из каталога</span></div>
-    <label>Группа в отчёте<input id="a-grp" list="a-grps" value="${esc(a.grp)}" placeholder="например: Гонконг (Reach / Target)"><datalist id="a-grps">${[...new Set(S.rawApps.filter(x=>x.studentId===a.studentId&&x.grp).map(x=>x.grp))].map(g=>`<option value="${esc(g)}">`).join("")}</datalist></label>
-    <label>Порядок в группе<input id="a-sort" inputmode="numeric" value="${esc(a.sort??"")}"></label>
-    <label>Рейтинг<input id="a-rating" value="${esc(a.rating)}" placeholder="${esc((u||{}).rating||"")}"></label>
-    <label>SAT (диапазон)<input id="a-sat" value="${esc(a.satRange)}" placeholder="1450–1570"></label>
-    <label class="full">Требования<input id="a-reqs" value="${esc(a.reqs)}" placeholder="${esc((u||{}).reqs||"")}"></label>
-    <label class="full">Дедлайн текстом<textarea id="a-dltext" style="min-height:44px" placeholder="${esc((u||{}).deadlineText||"")}">${esc(a.deadlineText)}</textarea></label>
-    <label class="full">Финансовая поддержка<textarea id="a-aid" style="min-height:52px" placeholder="${esc((u||{}).aid||"")}">${esc(a.aid)}</textarea></label>
     <label class="full">Свой дедлайн (если отличается от каталога)<input type="date" id="a-deadline" value="${esc(a.deadlineOverride||"")}"></label>
     <p class="full note" id="a-dl"></p>
-    <div class="sec">Для этого вуза</div>
     <label>Доп. эссе<select id="a-supp">${opts(WORK,a.supp||"Не начато",false)}</select></label>
     <p class="full note">Общие документы студента (эссе, рекомендации, транскрипт…) отмечаются один раз в его карточке: сейчас готово ${checkProg(studentOf(a.studentId)).done} из ${checkProg(studentOf(a.studentId)).total}.</p>
     <div class="sec">Результат</div>
     <label>Результат / стипендия<select id="a-result">${opts(RESULT,a.result||"—",false)}</select></label>
     <label>Сумма стипендии, $ в год<input id="a-amount" inputmode="numeric" value="${esc(a.amount)}"></label>
-    <label class="full">Заметки<textarea id="a-notes">${esc(a.notes)}</textarea></label>
+    <label class="full">Заметки куратора <span class="sub">— студент их не видит</span><textarea id="a-notes">${esc(a.notes)}</textarea></label>
+    <details class="more"><summary>Для отчёта: категория, группа, примечание, свои рейтинг / требования / дедлайн текстом…</summary><div class="grid">
+      <p class="full note" style="margin:0">Если поле пустое, в отчёт берётся значение из каталога.</p>
+      <label>Категория (для отчёта)<select id="a-tier">${opts(TIERS,a.tier)}</select></label>
+      <label class="full">Примечание для этого студента (добавится к «Финансовой поддержке» в отчёте)<textarea id="a-note" style="min-height:52px">${esc(a.note)}</textarea></label>
+      <label>Группа в отчёте<input id="a-grp" list="a-grps" value="${esc(a.grp)}" placeholder="например: Гонконг (Reach / Target)"><datalist id="a-grps">${[...new Set(S.rawApps.filter(x=>x.studentId===a.studentId&&x.grp).map(x=>x.grp))].map(g=>`<option value="${esc(g)}">`).join("")}</datalist></label>
+      <label>Порядок в группе<input id="a-sort" inputmode="numeric" value="${esc(a.sort??"")}"></label>
+      <label>Рейтинг<input id="a-rating" value="${esc(a.rating)}" placeholder="${esc((u||{}).rating||"")}"></label>
+      <label>SAT (диапазон)<input id="a-sat" value="${esc(a.satRange)}" placeholder="1450–1570"></label>
+      <label class="full">Требования<input id="a-reqs" value="${esc(a.reqs)}" placeholder="${esc((u||{}).reqs||"")}"></label>
+      <label class="full">Дедлайн текстом<textarea id="a-dltext" style="min-height:44px" placeholder="${esc((u||{}).deadlineText||"")}">${esc(a.deadlineText)}</textarea></label>
+      <label class="full">Финансовая поддержка<textarea id="a-aid" style="min-height:52px" placeholder="${esc((u||{}).aid||"")}">${esc(a.aid)}</textarea></label>
+    </div></details>
   </div></fieldset>${actions(false)}`,()=>{
     const upd=()=>{const uu=uniOf(val("a-uniid"));const rd=val("a-round");const cat=uu&&uu.deadlines&&rd?uu.deadlines[rd]:"";const own=val("a-deadline");
       $("#a-dl").textContent=own?`Используется свой дедлайн: ${fmtDate(own)}`:cat?`Дедлайн из каталога (${rd}): ${fmtDate(cat)}`:`В каталоге нет дедлайна для «${rd||"—"}». Добавьте его в карточке вуза или впишите свой.`};
@@ -934,7 +936,8 @@ function appSheet(id){
   });
 }
 
-function defaultRound(u,pref){const d=u.deadlines||{};if(pref&&pref!=="auto")return pref;return ["RD","EA","ED","REA","ED2","UCAS","Rolling","Стипендия","Другое"].find(k=>d[k])||"RD"}
+// тип подачи по умолчанию: ближайший ещё не прошедший дедлайн вуза, иначе Regular → Early → Rolling из каталога, иначе Regular
+function defaultRound(u,pref){const d=u.deadlines||{};if(pref&&pref!=="auto")return pref;const up=ROUNDS.filter(r=>d[r]&&daysLeft(d[r])>=0).sort((a,b)=>d[a].localeCompare(d[b]))[0];return up||["Regular","Early","Rolling"].find(k=>d[k])||"Regular"}
 
 function pickUnis(studentId){
   const studs=S.students.slice().sort((x,y)=>(x.name||"").localeCompare(y.name||"","ru"));
@@ -955,7 +958,7 @@ function pickUnis(studentId){
     <label class="full">Поиск<input id="p-q" placeholder="Название вуза"></label>
     <label>Регион<select id="p-region"><option value="">Все</option>${REGIONS.map(r=>`<option>${r}</option>`).join("")}</select></label>
     <label>Страна<select id="p-country"><option value="">Все</option>${countries.map(c=>`<option>${esc(c)}</option>`).join("")}</select></label>
-    <label class="full">Тип подачи для выбранных<select id="p-round"><option value="auto">Авто (RD, если есть в каталоге)</option>${ROUNDS.map(r=>`<option>${r}</option>`).join("")}</select></label>
+    <label class="full">Тип подачи для выбранных<select id="p-round"><option value="auto">Авто (ближайший дедлайн из каталога)</option>${ROUNDS.map(r=>`<option>${r}</option>`).join("")}</select></label>
   </div><div class="picklist" id="p-list"></div>
   <div class="actions"><span class="sp"></span><button class="btn" id="cancel">Отмена</button><button class="btn primary" id="p-go">Добавить</button></div>`,()=>{
     draw();
@@ -1043,7 +1046,7 @@ function vUnis(){
   const body=rows.map(u=>{const n=count(u.id);const d=u.deadlines||{};const next=ROUNDS.map(r=>d[r]).filter(x=>x&&daysLeft(x)>=0).sort()[0];
     const g=regionOf(u);let head="";if(g!==grp){grp=g;head=`<tr class="grp"><td colspan="8">${esc(g)} <span class="sub">· ${rows.filter(x=>regionOf(x)===g).length}</span></td></tr>`}
     const dlt=(u.deadlineText||"").length>70?u.deadlineText.slice(0,70)+"…":u.deadlineText;
-    return head+`<tr data-open-uni="${esc(u.id)}"><td><b>${esc(u.name)}</b>${u.city||u.rating?`<div class="sub">${esc([u.city,u.rating].filter(Boolean).join(" · "))}</div>`:""}</td><td>${esc(u.country||"")}</td><td class="num">${esc(tuitionText(u))}${u.fullRide==="Да"?'<div><span class="chip good">есть full-ride</span></div>':""}</td><td class="num">${u.ieltsMin!=null?esc(u.ieltsMin):""}</td><td>${dlSummary(u)?`<span class="sub">${esc(dlSummary(u))}</span>`:dlt?`<span class="sub">${esc(dlt)}</span>`:'<span class="chip warn">нет дедлайнов</span>'}</td><td class="num">${next?fmtDate(next):""}</td><td class="num">${n||""}</td><td class="sub">${esc(u.entranceExam||"")}</td></tr>`}).join("");
+    return head+`<tr data-open-uni="${esc(u.id)}"><td><b>${esc(u.name)}</b>${u.rating?`<div class="sub">${esc(u.rating)}</div>`:""}</td><td>${esc(u.country||"")}</td><td class="num">${esc(tuitionText(u))}${u.fullRide==="Да"?'<div><span class="chip good">есть full-ride</span></div>':""}</td><td class="num">${u.ieltsMin!=null?esc(u.ieltsMin):""}</td><td>${dlSummary(u)?`<span class="sub">${esc(dlSummary(u))}</span>`:dlt?`<span class="sub">${esc(dlt)}</span>`:'<span class="chip warn">нет дедлайнов</span>'}</td><td class="num">${next?fmtDate(next):""}</td><td class="num">${n||""}</td><td class="sub">${esc(u.entranceExam||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-uq" placeholder="Поиск по каталогу" value="${esc(f.uq)}">
     <select id="f-uregion"><option value="">Все регионы</option>${opts(REGIONS,f.uregion,false)}</select>
     <select id="f-ucountry"><option value="">Все страны</option>${opts(countries,f.ucountry,false)}</select>
@@ -1061,7 +1064,7 @@ function uniField(u,[c,t,l,,o]){const v=u[camel(c)]??"";const id="ux-"+c;const p
   if(t==="area")return `<label class="full">${esc(l)}<textarea id="${id}" style="min-height:52px"${ph}>${esc(v)}</textarea></label>`;
   const ty=t==="date"?"date":t==="text"?"text":"number";
   return `<label>${esc(l)}<input id="${id}" type="${ty}"${t==="dec"?' step="0.1" min="0"':t==="int"?' step="1" min="0"':""} value="${esc(v)}"${ph}></label>`}
-const uniExtraHtml=u=>[...new Set(UNI_EXTRA.map(x=>x[3]))].map(g=>`<div class="sec">${g==="Деньги"?"Деньги (USD в год)":esc(g)}</div>`+UNI_EXTRA.filter(x=>x[3]===g).map(x=>uniField(u,x)).join("")).join("");
+const uniExtraHtml=u=>[...new Set(UNI_EXTRA.map(x=>x[3]))].filter(g=>g!=="main").map(g=>`<div class="sec">${esc(g)}</div>`+UNI_EXTRA.filter(x=>x[3]===g).map(x=>uniField(u,x)).join("")).join("");
 const usd=n=>n==null||n===""?"":"$"+Number(n).toLocaleString("ru");
 const tuitionText=u=>u.tuitionUsdMin==null&&u.tuitionUsdMax==null?"":!u.tuitionUsdMin&&!u.tuitionUsdMax?"бесплатно":u.tuitionUsdMax!=null&&u.tuitionUsdMax!==u.tuitionUsdMin?`${usd(u.tuitionUsdMin??0)}–${usd(u.tuitionUsdMax).slice(1)}`:usd(u.tuitionUsdMin??u.tuitionUsdMax);
 function uniSheet(id){
@@ -1070,15 +1073,20 @@ function uniSheet(id){
   openSheet(`<h3>${isNew?"Новый вуз":esc(u.name)}</h3><fieldset style="border:0;padding:0;margin:0"${dis}><div class="grid">
     <label class="full">Название<input id="u-name" value="${esc(u.name)}"></label>
     <label>Страна<select id="u-country">${opts(COUNTRIES,u.country)}</select></label>
-    <label>Сайт / портал<input id="u-link" value="${esc(u.link)}" placeholder="https://"></label>
     <label>Рейтинг<input id="u-rating" value="${esc(u.rating)}" placeholder="QS 14, LAC #2…"></label>
-    <label>Дедлайны текстом (для отчёта)<input id="u-dltext" value="${esc(u.deadlineText)}" placeholder="ED: 1 нояб. / RD: 1 янв."></label>
-    <label class="full">Финансовая поддержка <span class="sub">— первое предложение будет жирным в отчёте</span><textarea id="u-aid" style="min-height:52px">${esc(u.aid)}</textarea></label>
+    <label>Сайт вуза<input id="u-link" value="${esc(u.link)}" placeholder="https://"></label>
+    ${uniField(u,UNI_EXTRA.find(x=>x[0]==="intl_portal"))}
     <div class="sec">Дедлайны</div>
-    ${ROUNDS.filter(r=>r!=="Другое").map(r=>`<label>${r}<input type="date" id="u-d-${r}" value="${esc(d[r]||"")}"></label>`).join("")}
-    <label class="full">Требования (тесты, эссе, рекомендации)<textarea id="u-reqs">${esc(u.reqs)}</textarea></label>
-    <label class="full">Заметки<textarea id="u-notes">${esc(u.notes)}</textarea></label>
-    ${uniExtraHtml(u)}
+    ${ROUNDS.map(r=>`<label>${r}<input type="date" id="u-d-${r}" value="${esc(d[r]||"")}"></label>`).join("")}
+    <label class="full">Дедлайны текстом (для отчёта)<input id="u-dltext" value="${esc(u.deadlineText)}" placeholder="Early: 1 нояб. / Regular: 1 янв."></label>
+    <div class="sec">Деньги и требования <span class="sub" style="text-transform:none;letter-spacing:0">— суммы в USD за год</span></div>
+    ${UNI_EXTRA.filter(x=>x[3]==="main"&&x[0]!=="intl_portal").map(x=>uniField(u,x)).join("")}
+    <label class="full">Финансовая поддержка <span class="sub">— первое предложение будет жирным в отчёте</span><textarea id="u-aid" style="min-height:52px">${esc(u.aid)}</textarea></label>
+    <details class="more"><summary>Подробнее: требования, заметки, подача, источник</summary><div class="grid">
+      <label class="full">Требования (тесты, эссе, рекомендации)<textarea id="u-reqs">${esc(u.reqs)}</textarea></label>
+      <label class="full">Заметки кураторов <span class="sub">— студенты их не видят</span><textarea id="u-notes">${esc(u.notes)}</textarea></label>
+      ${uniExtraHtml(u)}
+    </div></details>
   </div></fieldset>
   ${u.link&&/^https?:\/\//.test(u.link)?`<p><a class="note" href="${esc(u.link)}" target="_blank" rel="noopener">Открыть сайт ↗</a></p>`:""}
   ${id?`<div class="sec" style="margin-top:16px">Студенты (${apps.length})</div>${apps.length?`<div class="list" style="margin-top:6px">${apps.map(a=>`<div class="li" data-open-app="${esc(a.id)}"><div class="t">${esc(studentName(a.studentId))}<div class="sub">${esc([a.round,fmtDate(a.deadline)].filter(Boolean).join(" · "))}</div></div>${dueChip(a)}</div>`).join("")}</div>`:'<p class="note">Пока никто не подаёт.</p>'}`:""}
@@ -1113,12 +1121,17 @@ function bulkUniSheet(){
 }
 
 
+/* ---------- «Мои студенты»: фильтр по куратору общий для «Студентов», «Заявок» и «Статусов» и запоминается в этом браузере ---------- */
+const CUR_KEYS=["scur","acur","gcur"];
+function setMyCurator(v){CUR_KEYS.forEach(k=>S.f[k]=v);try{localStorage.setItem("gg-curator",v)}catch(e){}}
+try{const v=localStorage.getItem("gg-curator");if(v)CUR_KEYS.forEach(k=>S.f[k]=v)}catch(e){}
+
 /* ---------- binding ---------- */
 function bindView(){
   const on=(sel,ev,fn)=>{const el=$(sel);el&&el.addEventListener(ev,fn)};
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
   on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
-  [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{S.f[k]=e.target.value;render()}));
+  [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{if(CUR_KEYS.includes(k))setMyCurator(e.target.value);else S.f[k]=e.target.value;render()}));
   on("#add-student","click",()=>studentSheet());on("#auto-folders","click",()=>autoFoldersSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
   document.querySelectorAll("#main [data-open-student]").forEach(el=>el.addEventListener("click",e=>{e.preventDefault();studentSheet(el.dataset.openStudent)}));
@@ -1142,20 +1155,21 @@ const TABLES={students:"tracker_students",unis:"tracker_universities",apps:"trac
 /* подробные поля вуза (миграция 007): [столбец, тип, подпись, раздел, варианты/подсказка] — по этому списку строятся карточка, сохранение и COLS */
 const YNU=["Да","Нет","Неизвестно"];
 const UNI_EXTRA=[
-  ["city","text","Город","О вузе"],["uni_type","list","Тип вуза","О вузе",["Университет","Liberal arts college","Технический / политех","Прикладных наук","Другое"]],
-  ["ownership","list","Частный / гос.","О вузе",["Частный","Государственный"]],["language","list","Язык обучения","О вузе",["Английский","Местный язык","Английский и местный"]],
-  ["majors","area","Направления на английском","О вузе"],
-  ["tuition_usd_min","int","Обучение в год, $ (от)","Деньги"],["tuition_usd_max","int","Обучение в год, $ (до)","Деньги"],["coa_usd","int","Полная стоимость года, $","Деньги","обучение + жильё + жизнь"],
-  ["app_fee_usd","int","Сбор за подачу, $","Деньги"],["aid_policy","list","Помощь иностранцам","Деньги",["Need-blind","Need-aware","Нет need-based помощи","Неизвестно"]],
-  ["meets_need","list","Покрывает 100% потребности","Деньги",YNU],["merit","list","Мерит-стипендии","Деньги",YNU],["full_ride","list","Полная стипендия (full-ride)","Деньги",YNU],
+  // основное — видно сразу
+  ["intl_portal","text","Портал подачи для иностранцев","main","https://…"],
+  ["tuition_usd_min","int","Обучение в год, $ (от)","main"],["tuition_usd_max","int","Обучение в год, $ (до)","main"],
+  ["ielts_min","dec","Мин. IELTS","main"],["entrance_exam","text","Вступительный экзамен","main","CSCA, свой экзамен, интервью…"],
+  // «Подробнее»
+  ["majors","area","Направления на английском","Программы и требования"],
+  ["toefl_min","int","Мин. TOEFL iBT","Программы и требования"],["duolingo_min","int","Мин. Duolingo","Программы и требования"],
+  ["sat_policy","list","SAT / ACT","Программы и требования",["Обязателен","По желанию","Не рассматривается","Неизвестно"]],["sat_range","text","Средний SAT","Программы и требования","1450–1550"],
+  ["coa_usd","int","Полная стоимость года, $","Деньги","обучение + жильё + жизнь"],["app_fee_usd","int","Сбор за подачу, $","Деньги"],
+  ["merit","list","Мерит-стипендии","Деньги",YNU],["full_ride","list","Полная стипендия (full-ride)","Деньги",YNU],
+  ["aid_policy","list","Помощь иностранцам","Деньги",["Need-blind","Need-aware","Нет need-based помощи","Неизвестно"]],["meets_need","list","Покрывает 100% потребности","Деньги",YNU],
   ["costs_note","area","Расходы в валюте вуза","Деньги","как на сайте: тариф, общежитие, страховка…"],
-  ["ielts_min","dec","Мин. IELTS","Требования"],["toefl_min","int","Мин. TOEFL iBT","Требования"],["duolingo_min","int","Мин. Duolingo","Требования"],
-  ["sat_policy","list","SAT / ACT","Требования",["Обязателен","По желанию","Не рассматривается","Неизвестно"]],["sat_range","text","Средний SAT","Требования","1450–1550"],
-  ["entrance_exam","text","Вступительный экзамен","Требования","CSCA, свой экзамен, интервью…"],
-  ["admit_rate","dec","% принятых","Требования"],["admit_rate_intl","dec","% принятых иностранцев","Требования"],
-  ["intl_portal","text","Портал подачи для иностранцев","Подача","https://…"],["platform","list","Платформа подачи","Подача",["Common App","UCAS","Coalition","Свой портал","Другое"]],["fee_waiver","list","Fee waiver","Подача",YNU],["css_profile","list","Нужен CSS Profile","Подача",YNU],
+  ["platform","list","Платформа подачи","Подача",["Common App","UCAS","Coalition","Свой портал","Другое"]],["aid_deadline","date","Дедлайн фин. помощи / стипендии","Подача"],
   ["recs","int","Рекомендаций","Подача"],["supp_essays","int","Доп. эссе","Подача"],["interview","list","Интервью","Подача",["Обязательно","По желанию","Нет","Неизвестно"]],
-  ["aid_deadline","date","Дедлайн фин. помощи / стипендии","Подача"],
+  ["fee_waiver","list","Fee waiver","Подача",YNU],["css_profile","list","Нужен CSS Profile","Подача",YNU],
   ["verified_intake","list","Данные проверены для набора","Актуальность",["2026","2027","2028"]],["verified_at","date","Дата проверки","Актуальность"],["source","area","Источник","Актуальность","ссылки; «от поступивших студентов»"],
 ];
 const UNI_NULL=new Set(UNI_EXTRA.filter(x=>["int","dec","date"].includes(x[1])).map(x=>x[0]));

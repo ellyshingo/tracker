@@ -135,7 +135,7 @@ textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 <script>
 (() => {
 const STATUS=["Планируем","Готовим","Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"];
-const ROUNDS=["ED","ED2","EA","REA","RD","Rolling","UCAS","Стипендия","Другое"]; // как в index.html и tracker_valid_round()
+const ROUNDS=["Early","Regular","Rolling"]; // как в index.html и tracker_valid_round() (миграция 009)
 const SUBMITTED=new Set(["Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"]);
 const ST_CLS={"Планируем":"plan","Готовим":"prep","Подано":"sent","Интервью":"sent","Принят":"ok","Лист ожидания":"prep","Отказ":"no","Отозвано":"no"};
 const SEC_ORDER=["Listening","Reading","Reading & Writing","Writing","Speaking","Math"];
