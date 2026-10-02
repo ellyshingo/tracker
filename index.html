@@ -251,7 +251,7 @@ const intakeIdx=v=>{const i=INTAKES.indexOf(v||"Не определено");retu
 const DEFAULT_TEACHERS=["Aziz","Dina","Saikal","Elnur","Beksultan","Umidjon"];
 
 const S={tab:"summary",students:[],apps:[],rawApps:[],unis:[],tests:[],tasks:[],meetings:[],classes:[],members:[],me:"",mocks:[],lists:{curators:[],teachers:DEFAULT_TEACHERS},db:null,canWrite:true,ready:{students:false,apps:false,unis:false,tests:false,tasks:false,meetings:false,classes:false,members:false},
-  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",sq:"",sint:"",stype:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
+  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",ubudget:"",uielts:"",sq:"",sint:"",stype:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
 try{const t=localStorage.getItem("gg-tab");if(t&&["summary","students","apps","grid","sched","unis","settings"].includes(t))S.tab=t}catch(e){}
 
 const $=s=>document.querySelector(s);
@@ -1031,21 +1031,37 @@ async function quickAdd(sid,uid){
 function vUnis(){
   const f=S.f;const q=f.uq.trim().toLowerCase();
   const count=id=>S.rawApps.filter(a=>a.uniId===id).length;
-  const rows=S.unis.filter(u=>(!q||[u.name,u.country,u.reqs].join(" ").toLowerCase().includes(q))&&(!f.uregion||regionOf(u)===f.uregion)&&(!f.ucountry||u.country===f.ucountry)).sort(uniSort);
+  const budget=num(f.ubudget),ielts=num(f.uielts);
+  const base=S.unis.filter(u=>(!q||[u.name,u.country,u.city,u.majors,u.reqs,u.entranceExam].join(" ").toLowerCase().includes(q))&&(!f.uregion||regionOf(u)===f.uregion)&&(!f.ucountry||u.country===f.ucountry));
+  // Бюджет: вуз подходит, если нижняя граница обучения не выше бюджета. IELTS: минимум вуза не выше балла студента. Вузы без данных при включённом фильтре скрываются.
+  const rows=base.filter(u=>(budget==null||(u.tuitionUsdMin??u.tuitionUsdMax)!=null&&(u.tuitionUsdMin??u.tuitionUsdMax)<=budget)&&(ielts==null||u.ieltsMin!=null&&Number(u.ieltsMin)<=ielts)).sort(uniSort);
+  const hidden=base.length-rows.length;
   let grp=null;
   const countries=[...new Set(S.unis.map(u=>u.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ru"));
   const body=rows.map(u=>{const n=count(u.id);const d=u.deadlines||{};const next=ROUNDS.map(r=>d[r]).filter(x=>x&&daysLeft(x)>=0).sort()[0];
-    const g=regionOf(u);let head="";if(g!==grp){grp=g;head=`<tr class="grp"><td colspan="6">${esc(g)} <span class="sub">· ${rows.filter(x=>regionOf(x)===g).length}</span></td></tr>`}
-    return head+`<tr data-open-uni="${esc(u.id)}"><td><b>${esc(u.name)}</b></td><td>${esc(u.country||"")}</td><td>${dlSummary(u)?`<span class="sub">${esc(dlSummary(u))}</span>`:'<span class="chip warn">нет дедлайнов</span>'}</td><td class="num">${next?fmtDate(next):""}</td><td class="num">${n||""}</td><td class="sub">${esc(u.reqs||"")}</td></tr>`}).join("");
+    const g=regionOf(u);let head="";if(g!==grp){grp=g;head=`<tr class="grp"><td colspan="8">${esc(g)} <span class="sub">· ${rows.filter(x=>regionOf(x)===g).length}</span></td></tr>`}
+    const dlt=(u.deadlineText||"").length>70?u.deadlineText.slice(0,70)+"…":u.deadlineText;
+    return head+`<tr data-open-uni="${esc(u.id)}"><td><b>${esc(u.name)}</b>${u.city||u.rating?`<div class="sub">${esc([u.city,u.rating].filter(Boolean).join(" · "))}</div>`:""}</td><td>${esc(u.country||"")}</td><td class="num">${esc(tuitionText(u))}${u.fullRide==="Да"?'<div><span class="chip good">есть full-ride</span></div>':""}</td><td class="num">${u.ieltsMin!=null?esc(u.ieltsMin):""}</td><td>${dlSummary(u)?`<span class="sub">${esc(dlSummary(u))}</span>`:dlt?`<span class="sub">${esc(dlt)}</span>`:'<span class="chip warn">нет дедлайнов</span>'}</td><td class="num">${next?fmtDate(next):""}</td><td class="num">${n||""}</td><td class="sub">${esc(u.entranceExam||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-uq" placeholder="Поиск по каталогу" value="${esc(f.uq)}">
     <select id="f-uregion"><option value="">Все регионы</option>${opts(REGIONS,f.uregion,false)}</select>
     <select id="f-ucountry"><option value="">Все страны</option>${opts(countries,f.ucountry,false)}</select>
+    <input id="f-ubudget" type="number" min="0" step="1000" inputmode="numeric" placeholder="Бюджет до $/год" value="${esc(f.ubudget)}" style="width:150px" title="Показать вузы, где обучение в год не дороже этой суммы (USD)">
+    <input id="f-uielts" type="number" min="0" max="9" step="0.5" inputmode="decimal" placeholder="IELTS студента" value="${esc(f.uielts)}" style="width:130px" title="Показать вузы, где минимальный IELTS не выше этого балла">
     ${S.canWrite?'<button class="btn" id="bulk-uni">Вставить списком</button><button class="btn primary" id="add-uni">+ Вуз</button>':""}</div>
-    <div class="tablebox">${S.unis.length?`<table><thead><tr><th>Вуз</th><th>Страна</th><th>Дедлайны</th><th class="num">Ближайший</th><th class="num">Студентов</th><th>Требования</th></tr></thead><tbody>${body||'<tr><td colspan="6" class="empty">Ничего не найдено.</td></tr>'}</tbody></table>`
+    ${hidden&&(budget!=null||ielts!=null)?`<p class="note" style="margin-top:0">Скрыто ${hidden}: не подходят по бюджету или IELTS, либо в каталоге нет этих данных.</p>`:""}
+    <div class="tablebox">${S.unis.length?`<table><thead><tr><th>Вуз</th><th>Страна</th><th class="num">Обучение, $/год</th><th class="num">IELTS</th><th>Дедлайны</th><th class="num">Ближайший</th><th class="num">Студентов</th><th>Экзамен</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="empty">Ничего не найдено.</td></tr>'}</tbody></table>`
     :`<div class="empty"><b>${S.ready.unis?"Каталог вузов пуст":"Загружаю каталог…"}</b>${S.ready.unis?"Вуз с дедлайнами вносится один раз, а потом добавляется студентам галочками. Начните с «Вставить списком».":""}</div>`}</div>
     <p class="note">Дедлайны меняются каждый год — сверяйте их с сайтом вуза в начале сезона.</p>`;
 }
 
+function uniField(u,[c,t,l,,o]){const v=u[camel(c)]??"";const id="ux-"+c;const ph=o&&!Array.isArray(o)?` placeholder="${esc(o)}"`:"";
+  if(t==="list")return `<label>${esc(l)}<select id="${id}">${opts(o,v===""?"":String(v))}</select></label>`;
+  if(t==="area")return `<label class="full">${esc(l)}<textarea id="${id}" style="min-height:52px"${ph}>${esc(v)}</textarea></label>`;
+  const ty=t==="date"?"date":t==="text"?"text":"number";
+  return `<label>${esc(l)}<input id="${id}" type="${ty}"${t==="dec"?' step="0.1" min="0"':t==="int"?' step="1" min="0"':""} value="${esc(v)}"${ph}></label>`}
+const uniExtraHtml=u=>[...new Set(UNI_EXTRA.map(x=>x[3]))].map(g=>`<div class="sec">${g==="Деньги"?"Деньги (USD в год)":esc(g)}</div>`+UNI_EXTRA.filter(x=>x[3]===g).map(x=>uniField(u,x)).join("")).join("");
+const usd=n=>n==null||n===""?"":"$"+Number(n).toLocaleString("ru");
+const tuitionText=u=>u.tuitionUsdMin==null&&u.tuitionUsdMax==null?"":u.tuitionUsdMax!=null&&u.tuitionUsdMax!==u.tuitionUsdMin?`${usd(u.tuitionUsdMin??0)}–${usd(u.tuitionUsdMax).slice(1)}`:usd(u.tuitionUsdMin??u.tuitionUsdMax);
 function uniSheet(id){
   const u=S.unis.find(x=>x.id===id)||{deadlines:{}};const isNew=!id;const dis=S.canWrite?"":" disabled";const d=u.deadlines||{};
   const apps=id?S.apps.filter(a=>a.uniId===id):[];
@@ -1060,6 +1076,7 @@ function uniSheet(id){
     ${ROUNDS.filter(r=>r!=="Другое").map(r=>`<label>${r}<input type="date" id="u-d-${r}" value="${esc(d[r]||"")}"></label>`).join("")}
     <label class="full">Требования (тесты, эссе, рекомендации)<textarea id="u-reqs">${esc(u.reqs)}</textarea></label>
     <label class="full">Заметки<textarea id="u-notes">${esc(u.notes)}</textarea></label>
+    ${uniExtraHtml(u)}
   </div></fieldset>
   ${u.link&&/^https?:\/\//.test(u.link)?`<p><a class="note" href="${esc(u.link)}" target="_blank" rel="noopener">Открыть сайт ↗</a></p>`:""}
   ${id?`<div class="sec" style="margin-top:16px">Студенты (${apps.length})</div>${apps.length?`<div class="list" style="margin-top:6px">${apps.map(a=>`<div class="li" data-open-app="${esc(a.id)}"><div class="t">${esc(studentName(a.studentId))}<div class="sub">${esc([a.round,fmtDate(a.deadline)].filter(Boolean).join(" · "))}</div></div>${dueChip(a)}</div>`).join("")}</div>`:'<p class="note">Пока никто не подаёт.</p>'}`:""}
@@ -1070,7 +1087,7 @@ function uniSheet(id){
     $("#save").onclick=async()=>{
       const name=val("u-name");if(!name){toast("Впишите название");return}
       const dl={};ROUNDS.forEach(r=>{const v=val("u-d-"+r);if(v)dl[r]=v});
-      await save("unis",id,{name,country:val("u-country"),link:val("u-link"),rating:val("u-rating"),deadlineText:val("u-dltext"),aid:val("u-aid"),deadlines:dl,reqs:val("u-reqs"),notes:val("u-notes"),updatedAt:new Date().toISOString()},u);closeSheet();
+      await save("unis",id,{name,country:val("u-country"),link:val("u-link"),rating:val("u-rating"),deadlineText:val("u-dltext"),aid:val("u-aid"),deadlines:dl,reqs:val("u-reqs"),notes:val("u-notes"),...Object.fromEntries(UNI_EXTRA.map(([c])=>[camel(c),val("ux-"+c)])),updatedAt:new Date().toISOString()},u);closeSheet();
     };
     delBtn(async()=>{if(apps.length){toast(`Сначала удалите заявки (${apps.length}) этого вуза`);return}await remove("unis",id);closeSheet()});
   });
@@ -1098,7 +1115,7 @@ function bulkUniSheet(){
 function bindView(){
   const on=(sel,ev,fn)=>{const el=$(sel);el&&el.addEventListener(ev,fn)};
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
-  on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
+  on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
   [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{S.f[k]=e.target.value;render()}));
   on("#add-student","click",()=>studentSheet());on("#auto-folders","click",()=>autoFoldersSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
@@ -1120,10 +1137,31 @@ document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",
 
 /* ---------- Supabase ---------- */
 const TABLES={students:"tracker_students",unis:"tracker_universities",apps:"tracker_applications",tests:"tracker_tests",tasks:"tracker_tasks",meetings:"tracker_meetings",classes:"tracker_classes",members:"tracker_class_members"};
-const FIELD={timeStart:"time_start",timeEnd:"time_end",classId:"class_id",studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
+/* подробные поля вуза (миграция 007): [столбец, тип, подпись, раздел, варианты/подсказка] — по этому списку строятся карточка, сохранение и COLS */
+const YNU=["Да","Нет","Неизвестно"];
+const UNI_EXTRA=[
+  ["city","text","Город","О вузе"],["uni_type","list","Тип вуза","О вузе",["Университет","Liberal arts college","Технический / политех","Прикладных наук","Другое"]],
+  ["ownership","list","Частный / гос.","О вузе",["Частный","Государственный"]],["language","list","Язык обучения","О вузе",["Английский","Местный язык","Английский и местный"]],
+  ["majors","area","Направления на английском","О вузе"],
+  ["tuition_usd_min","int","Обучение в год, $ (от)","Деньги"],["tuition_usd_max","int","Обучение в год, $ (до)","Деньги"],["coa_usd","int","Полная стоимость года, $","Деньги","обучение + жильё + жизнь"],
+  ["app_fee_usd","int","Сбор за подачу, $","Деньги"],["aid_policy","list","Помощь иностранцам","Деньги",["Need-blind","Need-aware","Нет need-based помощи","Неизвестно"]],
+  ["meets_need","list","Покрывает 100% потребности","Деньги",YNU],["merit","list","Мерит-стипендии","Деньги",YNU],["full_ride","list","Полная стипендия (full-ride)","Деньги",YNU],
+  ["costs_note","area","Расходы в валюте вуза","Деньги","как на сайте: тариф, общежитие, страховка…"],
+  ["ielts_min","dec","Мин. IELTS","Требования"],["toefl_min","int","Мин. TOEFL iBT","Требования"],["duolingo_min","int","Мин. Duolingo","Требования"],
+  ["sat_policy","list","SAT / ACT","Требования",["Обязателен","По желанию","Не рассматривается","Неизвестно"]],["sat_range","text","Средний SAT","Требования","1450–1550"],
+  ["entrance_exam","text","Вступительный экзамен","Требования","CSCA, свой экзамен, интервью…"],
+  ["admit_rate","dec","% принятых","Требования"],["admit_rate_intl","dec","% принятых иностранцев","Требования"],
+  ["platform","list","Платформа подачи","Подача",["Common App","UCAS","Coalition","Свой портал","Другое"]],["fee_waiver","list","Fee waiver","Подача",YNU],["css_profile","list","Нужен CSS Profile","Подача",YNU],
+  ["recs","int","Рекомендаций","Подача"],["supp_essays","int","Доп. эссе","Подача"],["interview","list","Интервью","Подача",["Обязательно","По желанию","Нет","Неизвестно"]],
+  ["aid_deadline","date","Дедлайн фин. помощи / стипендии","Подача"],
+  ["verified_intake","list","Данные проверены для набора","Актуальность",["2026","2027","2028"]],["verified_at","date","Дата проверки","Актуальность"],["source","area","Источник","Актуальность","ссылки; «от поступивших студентов»"],
+];
+const UNI_NULL=new Set(UNI_EXTRA.filter(x=>["int","dec","date"].includes(x[1])).map(x=>x[0]));
+const camel=c=>c.replace(/_([a-z])/g,(_,l)=>l.toUpperCase());
+const FIELD={uniType:"uni_type",tuitionUsdMin:"tuition_usd_min",tuitionUsdMax:"tuition_usd_max",coaUsd:"coa_usd",appFeeUsd:"app_fee_usd",costsNote:"costs_note",aidPolicy:"aid_policy",meetsNeed:"meets_need",fullRide:"full_ride",ieltsMin:"ielts_min",toeflMin:"toefl_min",duolingoMin:"duolingo_min",satPolicy:"sat_policy",entranceExam:"entrance_exam",admitRate:"admit_rate",admitRateIntl:"admit_rate_intl",feeWaiver:"fee_waiver",cssProfile:"css_profile",suppEssays:"supp_essays",aidDeadline:"aid_deadline",verifiedIntake:"verified_intake",verifiedAt:"verified_at",timeStart:"time_start",timeEnd:"time_end",classId:"class_id",studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
   students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
-  unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at"],
+  unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at",...UNI_EXTRA.map(x=>x[0])],
   apps:["student_id","uni_id","program","round","deadline_override","status","tier","note","grp","sort","rating","sat_range","reqs","deadline_text","aid","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"],
   tests:["student_id","date","test","kind","sections","total","comment","created_at","updated_at"],
   tasks:["student_id","kind","period","title","due","done","status","sort","created_at","updated_at"],
@@ -1131,7 +1169,7 @@ const COLS={
   classes:["subject","teacher","pattern","time_start","time_end","room","sort","created_at","updated_at"],
   members:["class_id","student_id","created_at","updated_at"]};
 const UNFIELD=Object.fromEntries(Object.entries(FIELD).map(([a,b])=>[b,a]));
-function toRow(col,o){const r={};for(const k in o){const c=FIELD[k]||k;if(!COLS[col].includes(c))continue;let v=o[k];if(v===undefined)continue;if(["deadline_override","due","date"].includes(c)&&!v)v=null;if(typeof v==="number"&&c!=="sort")v=String(v);r[c]=v}return r}
+function toRow(col,o){const r={};for(const k in o){const c=FIELD[k]||k;if(!COLS[col].includes(c))continue;let v=o[k];if(v===undefined)continue;if((["deadline_override","due","date"].includes(c)||(col==="unis"&&UNI_NULL.has(c)))&&!v)v=null;if(typeof v==="number"&&c!=="sort")v=String(v);r[c]=v}return r}
 function fromRow(r){const o={};for(const k in r){const v=r[k];if(v===null)continue;o[UNFIELD[k]||k]=v}return o}
 function makeDb(sb){
   const chk=({error})=>{if(error)throw error};
