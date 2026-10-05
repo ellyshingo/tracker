@@ -230,22 +230,69 @@ function vPick(){
   <div id="cat-list">${catList()}</div>`;
 }
 function catList(){
+  if(editCat==="new")return `<div class="card" style="padding:0 14px 14px"><h2 class="sec" style="margin-top:14px">Новый вуз в каталоге</h2>${uniForm({})}</div>`;
   const q=catQ.trim().toLowerCase();const mine=new Set(D.apps.map(a=>a.uni_id));
   const rows=CAT.filter(u=>(!catCountry||u.country===catCountry)&&(!q||[u.name,u.city,u.country,u.majors].join(" ").toLowerCase().includes(q)));
-  if(!rows.length)return '<div class="card empty small">Ничего не найдено. Если нужного вуза нет в каталоге — напишите куратору.</div>';
-  return `<div class="card">${rows.slice(0,150).map(u=>{const op=openCat===u.id,inList=mine.has(u.id);return `<div class="uni${op?" open":""}">
+  const addBtn='<button class="btn small" type="button" id="cat-new" style="margin-bottom:10px">+ Нужного вуза нет — добавить</button>';
+  if(!rows.length)return addBtn+'<div class="card empty small">Ничего не найдено. Добавьте вуз сами — его увидят все студенты.</div>';
+  return addBtn+`<div class="card">${rows.slice(0,150).map(u=>{const op=openCat===u.id,inList=mine.has(u.id);return `<div class="uni${op?" open":""}">
     <button class="uh" data-cat="${esc(u.id)}" aria-expanded="${op}"><div class="t"><b>${esc(u.name)}</b><div class="sub">${esc([u.country,u.city,tuition(u),u.ielts_min!=null?"IELTS "+u.ielts_min:""].filter(Boolean).join(" · "))}</div></div>
       ${inList?'<span class="chip in">в списке</span>':""}<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     ${op?`<div class="ud">
-      ${kv("Рейтинг",u.rating)}${kv("Направления",u.majors)}${kv("Требования",u.reqs)}${kv("Экзамен",u.entrance_exam)}${kv("Стоимость",tuition(u))}${kv("Расходы",u.costs_note)}${kv("Стипендии",u.aid)}${kv("Дедлайны",u.deadline_text)}
+      ${editCat===u.id?uniForm(u):`${kv("Рейтинг",u.rating)}${kv("Направления",u.majors)}${kv("Требования",u.reqs)}${kv("IELTS",u.ielts_min!=null?String(u.ielts_min):"")}${kv("Экзамен",u.entrance_exam)}${kv("Стоимость",tuition(u))}${kv("Расходы",u.costs_note)}${kv("Стипендии",u.aid)}${kv("Дедлайны",dlLine(u.deadlines)||u.deadline_text)}${kv("От студентов",u.community_notes)}
       ${portalLinks(u)}
-      ${inList?'<p class="sub" style="margin-top:10px">Этот вуз уже в вашем списке.</p>':`<div class="ued"><label>Тип подачи<select id="add-round-${esc(u.id)}">${roundOpts(u.deadlines,nearestRound(u.deadlines))}</select></label>
+      <div class="ued"><div class="acts"><button class="btn small" type="button" data-cedit="${esc(u.id)}">Изменить информацию</button>${u.student_edited_at?`<span class="sub">обновлено студентами ${fmtDate(String(u.student_edited_at).slice(0,10))}</span>`:""}</div></div>`}
+      ${editCat===u.id?"":inList?'<p class="sub" style="margin-top:10px">Этот вуз уже в вашем списке.</p>':`<div class="ued"><label>Тип подачи<select id="add-round-${esc(u.id)}">${roundOpts(u.deadlines,nearestRound(u.deadlines))}</select></label>
         <label>Программа / специальность (необязательно)<input id="add-prog-${esc(u.id)}" maxlength="200" placeholder="например, Computer Science"></label>
         <button class="btn primary" type="button" data-add="${esc(u.id)}">Добавить в мой список</button></div>`}
     </div>`:""}</div>`}).join("")}</div>${rows.length>150?`<p class="sub">Показаны первые 150 — уточните поиск.</p>`:""}`;
 }
+/* --- студент добавляет / редактирует вуз в общем каталоге (student_save_uni: правки сразу видны всем, куратор видит историю) --- */
+let editCat=null; // id вуза в режиме редактирования или "new"
+const dlLine=dl=>ROUNDS.filter(r=>dl&&dl[r]).map(r=>`${r}: ${fmtDate(dl[r])}`).join(" · ");
+const YNU_S=["Да","Нет","Неизвестно"];
+const CE_FIELDS=[ // [столбец, тип, подпись, варианты/подсказка] — тот же список, что tracker_student_uni_fields() в миграции 010
+  ["link","url","Сайт вуза","https://…"],["intl_portal","url","Портал подачи для иностранцев","https://…"],
+  ["tuition_usd_min","int","Обучение в год, $ (от)"],["tuition_usd_max","int","Обучение в год, $ (до)"],["coa_usd","int","Полная стоимость года, $","обучение + жильё + жизнь"],["app_fee_usd","int","Сбор за подачу, $"],
+  ["costs_note","area","Расходы (как на сайте вуза)","тариф, общежитие, страховка — в валюте вуза"],
+  ["ielts_min","dec","Минимальный IELTS"],["toefl_min","int","Минимальный TOEFL iBT"],["duolingo_min","int","Минимальный Duolingo"],
+  ["sat_policy","list","SAT / ACT",["Обязателен","По желанию","Не рассматривается","Неизвестно"]],["sat_range","text","Средний SAT","например, 1350–1500"],["entrance_exam","text","Вступительный экзамен","CSCA, свой экзамен, интервью…"],
+  ["majors","area","Направления на английском"],["merit","list","Есть стипендии за успехи",YNU_S],["full_ride","list","Есть полная стипендия (full-ride)",YNU_S],
+  ["aid_deadline","date","Дедлайн по стипендии / гранту"],["platform","list","Где подаваться",["Common App","UCAS","Coalition","Свой портал","Другое"]],
+  ["community_notes","area","Полезное от студентов","гранты, требования, советы — увидят все студенты"]];
+function ceField([c,t,l,o],u){const v=u[c]??"";const id="ce-"+c;const ph=o&&!Array.isArray(o)?` placeholder="${esc(o)}"`:"";
+  if(t==="list")return `<label>${esc(l)}<select id="${id}"><option value=""></option>${o.map(x=>`<option${x===v?" selected":""}>${esc(x)}</option>`).join("")}</select></label>`;
+  if(t==="area")return `<label>${esc(l)}<textarea id="${id}" maxlength="3000"${ph}>${esc(v)}</textarea></label>`;
+  const ty=t==="url"?"url":t==="date"?"date":t==="text"?"text":"number";
+  return `<label>${esc(l)}<input id="${id}" type="${ty}"${t==="dec"?' step="0.5" min="0" max="9"':t==="int"?' step="1" min="0"':""} value="${esc(v)}"${ph}></label>`}
+function uniForm(u){const isNew=!u.id;const own=isNew||u.mine;const dl=u.deadlines||{};
+  const countries=[...new Set((CAT||[]).map(x=>x.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ru"));
+  return `<div class="ued" id="ce-form">${isNew?'<p class="sub" style="margin:0">Проверьте, что вуза точно нет в каталоге (поиск выше). Информацию увидят все студенты и кураторы.</p>':'<p class="sub" style="margin:0">Изменения сразу увидят все студенты. Куратор видит, что поменялось, и может вернуть прежнее.</p>'}
+    ${own?`<label>Название вуза<input id="ce-name" maxlength="200" value="${esc(u.name)}" placeholder="на английском, как на сайте вуза"></label>
+      <label>Страна<input id="ce-country" maxlength="60" list="ce-countries" value="${esc(u.country)}"><datalist id="ce-countries">${countries.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></label>`:""}
+    ${ROUNDS.map(r=>`<label>Дедлайн ${r}<input id="ce-d-${r}" type="date" value="${esc(dl[r]||"")}"></label>`).join("")}
+    ${CE_FIELDS.map(f=>ceField(f,u)).join("")}
+    ${isNew?'<label style="display:flex;gap:8px;align-items:center;color:var(--fg)"><input type="checkbox" id="ce-add" checked style="width:auto"> Сразу добавить в мой список</label>':""}
+    <div class="acts"><button class="btn primary" type="button" id="ce-save">${isNew?"Добавить вуз в каталог":"Сохранить"}</button><button class="btn" type="button" id="ce-cancel">Отмена</button></div></div>`}
+function bindUniForm(){
+  const f=$("#ce-form");if(!f)return;
+  $("#ce-cancel").onclick=()=>{editCat=null;$("#cat-list").innerHTML=catList();bindPick()};
+  $("#ce-save").onclick=async()=>{const b=$("#ce-save");const isNew=editCat==="new";
+    const data={deadlines:Object.fromEntries(ROUNDS.map(r=>[r,$("#ce-d-"+r).value]))};
+    CE_FIELDS.forEach(([c])=>{data[c]=$("#ce-"+c).value.trim()});
+    if($("#ce-name")){data.name=$("#ce-name").value.trim();data.country=$("#ce-country").value.trim();if(!data.name||!data.country){toast("Впишите название и страну");return}}
+    b.disabled=true;
+    const {data:id,error}=await SB.rpc("student_save_uni",{p_uni_id:isNew?null:editCat,p_data:data,p_add_to_list:isNew&&$("#ce-add").checked});
+    if(error){b.disabled=false;const m=error.message||"";
+      toast(/exists/.test(m)?"Такой вуз уже есть в каталоге — найдите его поиском":/bad url/.test(m)?"Ссылка должна начинаться с https://":/bad (number|ielts|date|value)/.test(m)?"Проверьте числа и даты":/required/.test(m)?"Впишите название и страну":"Не сохранилось. Попробуйте ещё раз");return}
+    toast(isNew?"Вуз добавлен в каталог":"Сохранено — изменения видят все студенты");
+    editCat=null;openCat=id;await loadCatalog();if(isNew)await load();else{$("#cat-list").innerHTML=catList();bindPick()}};
+}
 function bindPick(){
   const list=$("#cat-list");if(!list)return;
+  list.querySelectorAll("[data-cedit]").forEach(b=>b.onclick=()=>{editCat=b.dataset.cedit;list.innerHTML=catList();bindPick();const f=$("#ce-form");f&&f.scrollIntoView({block:"start",behavior:"smooth"})});
+  $("#cat-new")&&($("#cat-new").onclick=()=>{editCat="new";openCat=null;list.innerHTML=catList();bindPick()});
+  bindUniForm();
   list.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{openCat=openCat===b.dataset.cat?null:b.dataset.cat;list.innerHTML=catList();bindPick()});
   list.querySelectorAll("[data-add]").forEach(b=>b.onclick=async()=>{const id=b.dataset.add;b.disabled=true;
     const {error}=await SB.rpc("student_add_app",{p_uni_id:id,p_round:$("#add-round-"+CSS.escape(id)).value||null,p_program:$("#add-prog-"+CSS.escape(id)).value||null});
@@ -257,7 +304,7 @@ function bindMine(){
   const on=(sel,fn)=>document.querySelectorAll(sel).forEach(fn);
   const keepY=async f=>{const y=window.scrollY;await f();window.scrollTo(0,y)};
   $("#pick-open")&&($("#pick-open").onclick=async()=>{picking=true;openCat=null;render();if(!CAT){await loadCatalog();if(picking&&tab==="unis")render()}});
-  $("#pick-back")&&($("#pick-back").onclick=()=>{picking=false;render()});
+  $("#pick-back")&&($("#pick-back").onclick=()=>{picking=false;editCat=null;render()});
   $("#cat-q")&&($("#cat-q").oninput=e=>{catQ=e.target.value;$("#cat-list").innerHTML=catList();bindPick()});
   $("#cat-country")&&($("#cat-country").onchange=e=>{catCountry=e.target.value;$("#cat-list").innerHTML=catList();bindPick()});
   on("[data-upd]",b=>b.onclick=()=>keepY(async()=>{const id=b.dataset.upd;b.disabled=true;
@@ -352,7 +399,7 @@ document.addEventListener("submit",async e=>{if(e.target.id!=="doc-form")return;
   const b=e.target.querySelector("button");b.disabled=true;let n=0;
   for(const f of fl){b.textContent="Загружаю "+(n+1)+"/"+fl.length+"…";const fd=new FormData();fd.append("action","upload");fd.append("category",$("#doc-cat").value);fd.append("file",f,f.name);try{await driveCall(fd);n++}catch(err){toast(f.name+": "+err.message)}}
   b.disabled=false;b.textContent="Загрузить";if(n){toast("Загружено: "+n);e.target.reset()}loadDocs()});
-function go(t){tab=t;picking=false;try{localStorage.setItem("gg-stab",tab)}catch(e){}render()}
+function go(t){tab=t;picking=false;editCat=null;try{localStorage.setItem("gg-stab",tab)}catch(e){}render()}
 
 function chart(test,all,target){
   all=all.filter(t=>t.date&&num(t.total)!=null);if(!all.length)return "";
