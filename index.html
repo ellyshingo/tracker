@@ -235,7 +235,7 @@ tbody tr:hover .gcell{background:var(--surface)}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 (() => {
-const COUNTRIES=["США","Великобритания","Канада","Сингапур","Гонконг","Китай","Южная Корея","Япония","Нидерланды","Германия","Венгрия","Италия","ОАЭ","Катар","Малайзия","Турция","Другое"];
+const COUNTRIES=["США","Великобритания","Канада","Австралия","Новая Зеландия","Сингапур","Гонконг","Китай","Южная Корея","Япония","Малайзия","ОАЭ","Катар","Турция","Нидерланды","Германия","Венгрия","Италия","Испания","Франция","Швейцария","Ирландия","Чехия","Латвия","Литва","Другое"];
 const ROUNDS=["Early","Regular","Rolling"]; // как в student.html и tracker_valid_round() (миграция 009)
 const WORK=["Не начато","В работе","На проверке","Готово","Не нужно"];
 const CHECK=[["essay","Основное эссе"],["recs","Рекомендации"],["transcript","Транскрипт / оценки"],["tests","Результаты тестов"],["translation","Перевод документов"],["finance","Финансовые документы"]];
@@ -266,7 +266,7 @@ const studentName=id=>(S.students.find(s=>s.id===id)||{}).name||"—";
 const studentOf=id=>S.students.find(s=>s.id===id);
 const uniOf=id=>S.unis.find(u=>u.id===id);
 const REGIONS=["США","Европа","Азия","Другое"];
-const REGION_OF={"США":"США","Великобритания":"Европа","Нидерланды":"Европа","Германия":"Европа","Венгрия":"Европа","Италия":"Европа","Турция":"Европа","Канада":"Другое","Сингапур":"Азия","Гонконг":"Азия","Китай":"Азия","Южная Корея":"Азия","Япония":"Азия","Малайзия":"Азия","ОАЭ":"Азия","Катар":"Азия"};
+const REGION_OF={"США":"США","Великобритания":"Европа","Нидерланды":"Европа","Германия":"Европа","Венгрия":"Европа","Италия":"Европа","Турция":"Европа","Испания":"Европа","Франция":"Европа","Швейцария":"Европа","Ирландия":"Европа","Чехия":"Европа","Латвия":"Европа","Литва":"Европа","Австралия":"Другое","Новая Зеландия":"Другое","Канада":"Другое","Сингапур":"Азия","Гонконг":"Азия","Китай":"Азия","Южная Корея":"Азия","Япония":"Азия","Малайзия":"Азия","ОАЭ":"Азия","Катар":"Азия"};
 const regionOf=u=>REGION_OF[(u&&u.country)||""]||"Другое";
 const uniSort=(a,b)=>REGIONS.indexOf(regionOf(a))-REGIONS.indexOf(regionOf(b))||(a.country||"").localeCompare(b.country||"","ru")||(a.name||"").localeCompare(b.name||"","ru");
 function resolveApps(){S.apps=S.rawApps.map(a=>{const u=uniOf(a.uniId);const cat=u&&u.deadlines&&a.round?u.deadlines[a.round]:"";return {...a,uni:u?u.name:(a.uni||"вуз удалён"),country:u?u.country:(a.country||""),deadline:a.deadlineOverride||cat||a.deadline||""}})}
@@ -1044,7 +1044,7 @@ function vUnis(){
   const count=id=>S.rawApps.filter(a=>a.uniId===id).length;
   const budget=num(f.ubudget),ielts=num(f.uielts);
   const nEd=S.unis.filter(uniUnreviewed).length;
-  const base=S.unis.filter(u=>(!f.uedits||uniUnreviewed(u))&&(!q||[u.name,u.country,u.city,u.majors,u.reqs,u.entranceExam].join(" ").toLowerCase().includes(q))&&(!f.uregion||regionOf(u)===f.uregion)&&(!f.ucountry||u.country===f.ucountry));
+  const base=S.unis.filter(u=>(!f.uedits||uniUnreviewed(u))&&(!f.upartner||u.partner)&&(!q||[u.name,u.country,u.city,u.majors,u.reqs,u.entranceExam,u.partner].join(" ").toLowerCase().includes(q))&&(!f.uregion||regionOf(u)===f.uregion)&&(!f.ucountry||u.country===f.ucountry));
   // Бюджет: вуз подходит, если нижняя граница обучения не выше бюджета. IELTS: минимум вуза не выше балла студента. Вузы без данных при включённом фильтре скрываются.
   const rows=base.filter(u=>(budget==null||(u.tuitionUsdMin??u.tuitionUsdMax)!=null&&(u.tuitionUsdMin??u.tuitionUsdMax)<=budget)&&(ielts==null||u.ieltsMin!=null&&Number(u.ieltsMin)<=ielts)).sort(uniSort);
   const hidden=base.length-rows.length;
@@ -1053,12 +1053,13 @@ function vUnis(){
   const body=rows.map(u=>{const n=count(u.id);const d=u.deadlines||{};const next=ROUNDS.map(r=>d[r]).filter(x=>x&&daysLeft(x)>=0).sort()[0];
     const g=regionOf(u);let head="";if(g!==grp){grp=g;head=`<tr class="grp"><td colspan="8">${esc(g)} <span class="sub">· ${rows.filter(x=>regionOf(x)===g).length}</span></td></tr>`}
     const dlt=(u.deadlineText||"").length>70?u.deadlineText.slice(0,70)+"…":u.deadlineText;
-    return head+`<tr data-open-uni="${esc(u.id)}"><td><b>${esc(u.name)}</b>${uniUnreviewed(u)?' <span class="chip warn" title="Студенты что-то изменили — откройте вуз, чтобы посмотреть и отметить «Проверено»">'+(u.createdByStudent&&!u.studentEditsReviewedAt?"добавил студент":"правки студентов")+'</span>':""}${u.rating?`<div class="sub">${esc(u.rating)}</div>`:""}</td><td>${esc(u.country||"")}</td><td class="num">${esc(tuitionText(u))}${u.fullRide==="Да"?'<div><span class="chip good">есть full-ride</span></div>':""}</td><td class="num">${u.ieltsMin!=null?esc(u.ieltsMin):""}</td><td>${dlSummary(u)?`<span class="sub">${esc(dlSummary(u))}</span>`:dlt?`<span class="sub">${esc(dlt)}</span>`:'<span class="chip warn">нет дедлайнов</span>'}</td><td class="num">${next?fmtDate(next):""}</td><td class="num">${n||""}</td><td class="sub">${esc(u.entranceExam||"")}</td></tr>`}).join("");
+    return head+`<tr data-open-uni="${esc(u.id)}"><td><b>${esc(u.name)}</b>${uniUnreviewed(u)?' <span class="chip warn" title="Студенты что-то изменили — откройте вуз, чтобы посмотреть и отметить «Проверено»">'+(u.createdByStudent&&!u.studentEditsReviewedAt?"добавил студент":"правки студентов")+'</span>':""}${u.partner?` <span class="chip acc" title="Партнёр GetGrant: ${esc(u.partner)}">${/^★/.test(u.partner)?"★ партнёр":"партнёр"}</span>`:""}${u.rating?`<div class="sub">${esc(u.rating)}</div>`:""}</td><td>${esc(u.country||"")}</td><td class="num">${esc(tuitionText(u))}${u.fullRide==="Да"?'<div><span class="chip good">есть full-ride</span></div>':""}</td><td class="num">${u.ieltsMin!=null?esc(u.ieltsMin):""}</td><td>${dlSummary(u)?`<span class="sub">${esc(dlSummary(u))}</span>`:dlt?`<span class="sub">${esc(dlt)}</span>`:'<span class="chip warn">нет дедлайнов</span>'}</td><td class="num">${next?fmtDate(next):""}</td><td class="num">${n||""}</td><td class="sub">${esc(u.entranceExam||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-uq" placeholder="Поиск по каталогу" value="${esc(f.uq)}">
     <select id="f-uregion"><option value="">Все регионы</option>${opts(REGIONS,f.uregion,false)}</select>
     <select id="f-ucountry"><option value="">Все страны</option>${opts(countries,f.ucountry,false)}</select>
     <input id="f-ubudget" type="number" min="0" step="1000" inputmode="numeric" placeholder="Бюджет до $/год" value="${esc(f.ubudget)}" style="width:150px" title="Показать вузы, где обучение в год не дороже этой суммы (USD)">
     <input id="f-uielts" type="number" min="0" max="9" step="0.5" inputmode="decimal" placeholder="IELTS студента" value="${esc(f.uielts)}" style="width:130px" title="Показать вузы, где минимальный IELTS не выше этого балла">
+    <button class="btn${f.upartner?" primary":""}" id="f-upartner" type="button" title="Показать только партнёрские вузы GetGrant">Партнёры</button>
     ${nEd||f.uedits?`<button class="btn${f.uedits?" primary":""}" id="f-uedits" type="button" title="Показать только вузы с непроверенными правками студентов">Правки студентов${nEd?" · "+nEd:""}</button>`:""}
     ${S.canWrite?'<button class="btn" id="bulk-uni">Вставить списком</button><button class="btn primary" id="add-uni">+ Вуз</button>':""}</div>
     ${hidden&&(budget!=null||ielts!=null)?`<p class="note" style="margin-top:0">Скрыто ${hidden}: не подходят по бюджету или IELTS, либо в каталоге нет этих данных.</p>`:""}
@@ -1108,11 +1109,12 @@ function uniSheet(id){
     <label>Рейтинг<input id="u-rating" value="${esc(u.rating)}" placeholder="QS 14, LAC #2…"></label>
     <label>Сайт вуза<input id="u-link" value="${esc(u.link)}" placeholder="https://"></label>
     ${uniField(u,UNI_EXTRA.find(x=>x[0]==="intl_portal"))}
+    <div class="full">${uniField(u,UNI_EXTRA.find(x=>x[0]==="partner"))}</div>
     <div class="sec">Дедлайны</div>
     ${ROUNDS.map(r=>`<label>${r}<input type="date" id="u-d-${r}" value="${esc(d[r]||"")}"></label>`).join("")}
     <label class="full">Дедлайны текстом (для отчёта)<input id="u-dltext" value="${esc(u.deadlineText)}" placeholder="Early: 1 нояб. / Regular: 1 янв."></label>
     <div class="sec">Деньги и требования <span class="sub" style="text-transform:none;letter-spacing:0">— суммы в USD за год</span></div>
-    ${UNI_EXTRA.filter(x=>x[3]==="main"&&x[0]!=="intl_portal").map(x=>uniField(u,x)).join("")}
+    ${UNI_EXTRA.filter(x=>x[3]==="main"&&x[0]!=="intl_portal"&&x[0]!=="partner").map(x=>uniField(u,x)).join("")}
     <label class="full">Финансовая поддержка <span class="sub">— первое предложение будет жирным в отчёте</span><textarea id="u-aid" style="min-height:52px">${esc(u.aid)}</textarea></label>
     <details class="more"><summary>Подробнее: требования, заметки, подача, источник</summary><div class="grid">
       <label class="full">Требования (тесты, эссе, рекомендации)<textarea id="u-reqs">${esc(u.reqs)}</textarea></label>
@@ -1164,7 +1166,7 @@ try{const v=localStorage.getItem("gg-curator");if(v)CUR_KEYS.forEach(k=>S.f[k]=v
 function bindView(){
   const on=(sel,ev,fn)=>{const el=$(sel);el&&el.addEventListener(ev,fn)};
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
-  on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-uedits","click",()=>{S.f.uedits=S.f.uedits?"":"1";render()});on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
+  on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-upartner","click",()=>{S.f.upartner=S.f.upartner?"":"1";render()});on("#f-uedits","click",()=>{S.f.uedits=S.f.uedits?"":"1";render()});on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
   [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{if(CUR_KEYS.includes(k))setMyCurator(e.target.value);else S.f[k]=e.target.value;render()}));
   on("#add-student","click",()=>studentSheet());on("#auto-folders","click",()=>autoFoldersSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
@@ -1191,6 +1193,7 @@ const YNU=["Да","Нет","Неизвестно"];
 const UNI_EXTRA=[
   // основное — видно сразу
   ["intl_portal","text","Портал подачи для иностранцев","main","https://…"],
+  ["partner","text","Партнёр GetGrant (видят только кураторы)","main","★ Через Navitas · Прямой договор · Не продвигаем…"],
   ["tuition_usd_min","int","Обучение в год, $ (от)","main"],["tuition_usd_max","int","Обучение в год, $ (до)","main"],
   ["ielts_min","dec","Мин. IELTS","main"],["entrance_exam","text","Вступительный экзамен","main","CSCA, свой экзамен, интервью…"],
   // «Подробнее»
