@@ -322,7 +322,7 @@ function vSummary(){
   const imax=Math.max(1,...Object.values(byInt));
   const intHtml=st.length?`<div class="bars">${Object.entries(byInt).sort((a,b)=>intakeIdx(a[0])-intakeIdx(b[0])).map(([k,v])=>`<div class="bar" data-intake="${esc(k)}" style="cursor:pointer"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${v/imax*100}%"></div></div><span class="c">${v}</span></div>`).join("")}</div>`:`<div class="empty">Студентов пока нет.</div>`;
   const overdue=S.tasks.filter(t=>!t.done&&t.due&&daysLeft(t.due)<0).sort((a,b)=>a.due.localeCompare(b.due));
-  const below=[];adm.forEach(s=>Object.entries(s.targets||{}).forEach(([t,g])=>{const b=bestOfficial(s.id,t)||studentTests(s.id).filter(x=>x.test===t&&num(x.total)!=null).at(-1);if(!b)return;const cur=num(b.total),goal=num(g);if(cur!=null&&goal!=null&&cur<goal)below.push({s,t,cur:fmtScore(t,cur),goal:fmtScore(t,goal),gap:fmtScore(t,+(goal-cur).toFixed(1))})}));below.sort((a,b)=>num(b.gap)-num(a.gap));
+  const below=[];adm.forEach(s=>Object.entries(s.targets||{}).forEach(([t,g])=>{const b=bestScore(s.id,t);if(!b)return;const cur=num(b.total),goal=num(g);if(cur!=null&&goal!=null&&cur<goal)below.push({s,t,cur:fmtScore(t,cur),goal:fmtScore(t,goal),gap:fmtScore(t,+(goal-cur).toFixed(1))})}));below.sort((a,b)=>num(b.gap)-num(a.gap));
   const quiet=adm.filter(s=>{const m=lastMeeting(s.id);return !m||daysLeft(m.date)<-30});
   const noAppsHtml=noApps.length?noApps.map(s=>`<div class="li" data-open-student="${esc(s.id)}"><div class="t">${esc(s.name)}<div class="sub">${esc(s.curator||"куратор не назначен")}</div></div><span class="chip warn">нет заявок</span></div>`).join(""):`<div class="empty">У всех поступающих есть заявки.</div>`;
   return `<div class="tiles">${tiles}</div>
@@ -349,7 +349,7 @@ function vStudents(){
     const g=s.intake||"Не определено";let head="";
     if(g!==grp){grp=g;const cnt=rows.filter(x=>(x.intake||"Не определено")===g).length;head=`<tr class="grp"><td colspan="9">${esc(g)} <span class="sub">· ${cnt}</span></td></tr>`}
     return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b><div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type?`<div><span class="chip ${s.type==="Курсы"?"":"acc"}">${esc(s.type)}</span></div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
-    <td class="num">${esc(s.ielts||"")}${s.toefl?`<div class="sub">TOEFL ${esc(s.toefl)}</div>`:""}</td><td class="num">${esc(s.sat||"")}</td><td class="num">${esc(s.ort||"")}</td><td class="num">${n||""}</td><td class="sub">${esc(s.countries||"")}</td></tr>`}).join("");
+    <td class="num">${scoreCell(s,"IELTS","ielts")}${bestScore(s.id,"TOEFL")||s.toefl?`<div class="sub">TOEFL ${scoreCell(s,"TOEFL","toefl")}</div>`:""}</td><td class="num">${scoreCell(s,"SAT","sat")}</td><td class="num">${scoreCell(s,"ОРТ","ort")}</td><td class="num">${n||""}</td><td class="sub">${esc(s.countries||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-sq" placeholder="Поиск: имя, специальность, страна" value="${esc(f.sq)}">
     <select id="f-sint"><option value="">Все сезоны</option>${opts(INTAKES,f.sint,false)}</select>
     <select id="f-stype"><option value="">Все типы</option>${opts(STYPE,f.stype,false)}</select>
@@ -417,6 +417,10 @@ const num=v=>{const n=parseFloat(String(v??"").replace(",","."));return isFinite
 const fmtScore=(t,v)=>v==null?"":(t==="IELTS"?Number(v).toFixed(1):String(v));
 const boldLead=t=>{const m=String(t).match(/^([^:]{2,60}):\s*(.*)$/s);return m?`<b>${esc(m[1])}:</b> ${esc(m[2])}`:esc(t)};
 const studentTests=id=>S.tests.filter(t=>t.studentId===id).sort((a,b)=>(a.date||"0000").localeCompare(b.date||"0000"));
+// лучший результат для баллов студента: лучший официальный, а если официальных нет — лучший пробный
+function bestScore(id,test){const all=S.tests.filter(t=>t.studentId===id&&t.test===test&&num(t.total)!=null);const off=all.filter(t=>t.kind==="Официальный");return (off.length?off:all).sort((a,b)=>num(b.total)-num(a.total))[0]}
+// ячейка балла: из тестов (с пометкой «пробн.»), иначе вписанное вручную
+function scoreCell(s,test,field){const b=bestScore(s.id,test);if(!b)return esc(s[field]||"");return esc(fmtScore(test,num(b.total)))+(b.kind==="Официальный"?"":' <span class="sub" title="Лучший пробный тест от '+esc(fmtDate(b.date))+' — официальных пока нет">пробн.</span>')}
 function bestOfficial(id,test){const o=S.tests.filter(t=>t.studentId===id&&t.test===test&&t.kind==="Официальный"&&num(t.total)!=null);return o.sort((a,b)=>num(b.total)-num(a.total))[0]}
 function lastMeeting(id){return S.meetings.filter(m=>m.studentId===id).sort((a,b)=>(b.date||"").localeCompare(a.date||""))[0]}
 function periodOrder(tasks){const o={};tasks.forEach(t=>{const k=t.period||"Без периода";const v=t.due||"";const s=t.sort??0;if(!(k in o)||s<o[k].s)o[k]={s,d:v}});return Object.keys(o).sort((a,b)=>o[a].s-o[b].s)}
@@ -455,9 +459,9 @@ function profileFields(s){return `<div class="grid">
     <label class="full">Целевые страны<textarea id="s-countries" style="min-height:52px">${esc(s.countries)}</textarea></label>
     <div class="sec">Общие документы (одни на все вузы)</div>
     ${CHECK.map(([k,l])=>`<label>${l}<select id="c-${k}">${opts(WORK,((s.checklist||{})[k])||"Не начато",false)}</select></label>`).join("")}
-    <div class="sec">Баллы <span class="sub" style="text-transform:none;letter-spacing:0">— лучший официальный результат из вкладки «Тесты»; пока официальных тестов нет, можно вписать вручную</span></div>
-    ${[["IELTS","ielts","decimal"],["TOEFL","toefl","numeric"],["SAT","sat","numeric"],["ОРТ","ort","numeric"]].map(([t,f,im])=>{const b=s.id&&bestOfficial(s.id,t);
-      return b?`<label>${t} <span class="sub">из тестов</span><input id="s-${f}" value="${esc(fmtScore(t,num(b.total)))}" readonly title="Официальный тест от ${fmtDate(b.date)} — меняется во вкладке «Тесты»"></label>`
+    <div class="sec">Баллы <span class="sub" style="text-transform:none;letter-spacing:0">— берутся из вкладки «Тесты»: лучший официальный, а пока официальных нет — лучший пробный; без тестов можно вписать вручную</span></div>
+    ${[["IELTS","ielts","decimal"],["TOEFL","toefl","numeric"],["SAT","sat","numeric"],["ОРТ","ort","numeric"]].map(([t,f,im])=>{const b=s.id&&bestScore(s.id,t);const off=b&&b.kind==="Официальный";
+      return b?`<label>${t} <span class="sub">${off?"из тестов":"лучший пробный"}</span><input id="s-${f}" value="${esc(fmtScore(t,num(b.total)))}" readonly title="${off?"Официальный":"Пробный"} тест от ${fmtDate(b.date)} — меняется во вкладке «Тесты»"></label>`
         :`<label>${t}<input id="s-${f}" inputmode="${im}" value="${esc(s[f])}"></label>`}).join("")}
     <label>GPA<input id="s-gpa" value="${esc(s.gpa)}"></label>
     <div class="sec">Контакты</div>
@@ -554,7 +558,7 @@ function bTests(s){
     const targets={};["IELTS","SAT","TOEFL","Duolingo","ОРТ"].forEach(k=>{const v=val("g-"+k);if(v)targets[k]=v});
     try{await S.db.doc("students/"+s.id).update({metrics,targets,updatedAt:new Date().toISOString()});toast("Сохранено");await refreshCard("students")}catch(e){fail(e)}};
 }
-async function syncBest(sid){const s=studentOf(sid);if(!s)return;const upd={};Object.entries(TEST_FIELD).forEach(([t,f])=>{const b=bestOfficial(sid,t);if(b&&String(b.total)!==String(s[f]||""))upd[f]=String(b.total)});
+async function syncBest(sid){const s=studentOf(sid);if(!s)return;const upd={};Object.entries(TEST_FIELD).forEach(([t,f])=>{const b=bestScore(sid,t);if(b&&String(b.total)!==String(s[f]||""))upd[f]=String(b.total)});
   if(Object.keys(upd).length){try{await S.db.doc("students/"+sid).update(upd);await reload("students")}catch(e){}}}
 
 /* --- portfolio --- */
