@@ -109,6 +109,7 @@ h2{font-size:15px;margin:0 0 10px;font-weight:600;text-wrap:balance}
 .grid .full{grid-column:1/-1}
 @media (max-width:480px){.grid{grid-template-columns:1fr}}
 label{display:grid;gap:4px;font-size:12.5px;color:var(--muted);font-weight:500;min-width:0}
+.schoolbar{display:flex;gap:4px;background:var(--surface-2);border-radius:10px;padding:4px;margin-bottom:14px;overflow-x:auto}.schoolbar button{font:inherit;font-size:13.5px;font-weight:600;border:0;background:none;color:var(--muted);padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}.schoolbar button[aria-selected="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}.schoolbar .n{font-weight:500;color:var(--muted);margin-left:2px}
 details.more{grid-column:1/-1;border-top:1px solid var(--line);margin-top:6px;padding-top:4px}details.more>summary{cursor:pointer;font-weight:600;color:var(--accent);padding:8px 0}details.more>.grid{margin-top:6px}
 .sec{grid-column:1/-1;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);font-weight:600;margin-top:8px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;align-items:center}
@@ -246,6 +247,11 @@ const SUBMITTED=new Set(["Подано","Интервью","Принят","Ли�
 const RESULT=["—","Полная стипендия","Частичная","Без стипендии"];
 const STYPE=["В этом году","Позже"]; // «Когда поступает» (столбец type, миграция 012)
 const TRACKS=["На грант","Партнёрские вузы"]; // «Тип поступления» (столбец track)
+const SCHOOLS=["Центр GetGrant","Келечек MIT","Звёздочка"]; // «Где учится» (столбец school, миграция 013)
+const schoolOf=s=>(s&&s.school)||SCHOOLS[0];
+// общий переключатель школы: пусто — все; применяется к сводке, студентам, заявкам и статусам
+const inSchool=s=>!S.f.school||schoolOf(s)===S.f.school;
+const appInSchool=a=>!S.f.school||inSchool(studentOf(a.studentId)||{});
 const SSTATUS=["Активен","Пауза","Завершил"];
 const COURSES=["IELTS","SAT","Pre IELTS","Academic Writing","Grammar","Intensive","Pre-Intermediate","Intermediate","Upper-Intermediate","Advanced","Math","Индивидуально"];
 const INTAKES=["Осень 2027","Весна 2027","Осень 2028","Осень 2029","Осень 2030","Не определено"];
@@ -253,7 +259,7 @@ const intakeIdx=v=>{const i=INTAKES.indexOf(v||"Не определено");retu
 const DEFAULT_TEACHERS=["Aziz","Dina","Saikal","Elnur","Beksultan","Umidjon"];
 
 const S={tab:"summary",students:[],apps:[],rawApps:[],unis:[],tests:[],tasks:[],meetings:[],classes:[],members:[],me:"",mocks:[],lists:{curators:[],teachers:DEFAULT_TEACHERS},db:null,canWrite:true,ready:{students:false,apps:false,unis:false,tests:false,tasks:false,meetings:false,classes:false,members:false},
-  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",ubudget:"",uielts:"",sq:"",sint:"",stype:"",strack:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
+  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",ubudget:"",uielts:"",sq:"",sint:"",stype:"",strack:"",school:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
 try{const t=localStorage.getItem("gg-tab");if(t&&["summary","students","apps","grid","sched","unis","settings"].includes(t))S.tab=t}catch(e){}
 
 const $=s=>document.querySelector(s);
@@ -296,12 +302,15 @@ function render(){
   const m=$("#main");
   const ro=S.canWrite?"":'<div class="banner">У вас доступ только на просмотр. Чтобы вносить изменения, попросите владельца дать вам уровень Contributor или выше.</div>';
   const mig=S.needsMigration?'<div class="banner">Нужно обновить базу: запустите в Supabase → SQL Editor файлы обновлений по порядку (update_02 … update_05.sql). Пока не запустите, часть разделов не работает.</div>':"";
-  m.innerHTML=ro+mig+({summary:vSummary,students:vStudents,apps:vApps,grid:vGrid,sched:vSched,unis:vUnis,settings:vSettings}[S.tab]||vSummary)();
+  const sbar=["summary","students","apps","grid"].includes(S.tab)?schoolBar():"";
+  m.innerHTML=ro+mig+sbar+({summary:vSummary,students:vStudents,apps:vApps,grid:vGrid,sched:vSched,unis:vUnis,settings:vSettings}[S.tab]||vSummary)();
   bindView();
 }
 
+function schoolBar(){const n=x=>S.students.filter(s=>!x||schoolOf(s)===x).length;
+  return `<div class="seg schoolbar" role="tablist" aria-label="Где учится">${["",...SCHOOLS].map(x=>`<button type="button" role="tab" data-school="${esc(x)}" aria-selected="${(S.f.school||"")===x}">${x?esc(x):"Все"} <span class="n">${n(x)}</span></button>`).join("")}</div>`}
 function vSummary(){
-  const st=S.students, ap=S.apps;
+  const st=S.students.filter(inSchool), ap=S.apps.filter(appInSchool);
   const adm=st; // все студенты поступают (типа «Курсы» больше нет)
   const thisYear=st.filter(s=>s.type==="В этом году");
   const open=ap.filter(a=>!SUBMITTED.has(a.status));
@@ -323,7 +332,7 @@ function vSummary(){
   const byInt={};st.forEach(s=>{const k=s.intake||"Не определено";byInt[k]=(byInt[k]||0)+1});
   const imax=Math.max(1,...Object.values(byInt));
   const intHtml=st.length?`<div class="bars">${Object.entries(byInt).sort((a,b)=>intakeIdx(a[0])-intakeIdx(b[0])).map(([k,v])=>`<div class="bar" data-intake="${esc(k)}" style="cursor:pointer"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${v/imax*100}%"></div></div><span class="c">${v}</span></div>`).join("")}</div>`:`<div class="empty">Студентов пока нет.</div>`;
-  const overdue=S.tasks.filter(t=>!t.done&&t.due&&daysLeft(t.due)<0).sort((a,b)=>a.due.localeCompare(b.due));
+  const overdue=S.tasks.filter(t=>!t.done&&t.due&&daysLeft(t.due)<0&&inSchool(studentOf(t.studentId)||{})).sort((a,b)=>a.due.localeCompare(b.due));
   const below=[];adm.forEach(s=>Object.entries(s.targets||{}).forEach(([t,g])=>{const b=bestScore(s.id,t);if(!b)return;const cur=num(b.total),goal=num(g);if(cur!=null&&goal!=null&&cur<goal)below.push({s,t,cur:fmtScore(t,cur),goal:fmtScore(t,goal),gap:fmtScore(t,+(goal-cur).toFixed(1))})}));below.sort((a,b)=>num(b.gap)-num(a.gap));
   const quiet=adm.filter(s=>{const m=lastMeeting(s.id);return !m||daysLeft(m.date)<-30});
   const noAppsHtml=noApps.length?noApps.map(s=>`<div class="li" data-open-student="${esc(s.id)}"><div class="t">${esc(s.name)}<div class="sub">${esc(s.curator||"куратор не назначен")}</div></div><span class="chip warn">нет заявок</span></div>`).join(""):`<div class="empty">У всех, кто поступает в этом году, есть заявки.</div>`;
@@ -344,13 +353,13 @@ function vSummary(){
 
 function vStudents(){
   const f=S.f;const q=f.sq.trim().toLowerCase();
-  const rows=S.students.filter(s=>(!q||[s.name,s.major,s.countries,s.notes].join(" ").toLowerCase().includes(q))&&(!f.sint||(s.intake||"Не определено")===f.sint)&&(!f.stype||s.type===f.stype)&&(!f.strack||s.track===f.strack)&&(!f.scur||(s.curator||"")===f.scur))
+  const rows=S.students.filter(s=>inSchool(s)&&(!q||[s.name,s.major,s.countries,s.notes].join(" ").toLowerCase().includes(q))&&(!f.sint||(s.intake||"Не определено")===f.sint)&&(!f.stype||s.type===f.stype)&&(!f.strack||s.track===f.strack)&&(!f.scur||(s.curator||"")===f.scur))
     .sort((a,b)=>intakeIdx(a.intake)-intakeIdx(b.intake)||(a.name||"").localeCompare(b.name||"","ru"));
   let grp=null;
   const body=rows.map(s=>{const n=S.apps.filter(a=>a.studentId===s.id).length;
     const g=s.intake||"Не определено";let head="";
     if(g!==grp){grp=g;const cnt=rows.filter(x=>(x.intake||"Не определено")===g).length;head=`<tr class="grp"><td colspan="9">${esc(g)} <span class="sub">· ${cnt}</span></td></tr>`}
-    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b><div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type||s.track?`<div>${s.type?`<span class="chip ${s.type==="В этом году"?"acc":""}">${esc(s.type)}</span>`:""}${s.track?` <span class="chip">${esc(s.track)}</span>`:""}</div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
+    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b>${schoolOf(s)!==SCHOOLS[0]?` <span class="chip warn">${esc(schoolOf(s))}</span>`:""}<div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type||s.track?`<div>${s.type?`<span class="chip ${s.type==="В этом году"?"acc":""}">${esc(s.type)}</span>`:""}${s.track?` <span class="chip">${esc(s.track)}</span>`:""}</div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
     <td class="num">${scoreCell(s,"IELTS","ielts")}${bestScore(s.id,"TOEFL")||s.toefl?`<div class="sub">TOEFL ${scoreCell(s,"TOEFL","toefl")}</div>`:""}</td><td class="num">${scoreCell(s,"SAT","sat")}</td><td class="num">${scoreCell(s,"ОРТ","ort")}</td><td class="num">${n||""}</td><td class="sub">${esc(s.countries||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-sq" placeholder="Поиск: имя, специальность, страна" value="${esc(f.sq)}">
     <select id="f-sint"><option value="">Все сезоны</option>${opts(INTAKES,f.sint,false)}</select>
@@ -364,10 +373,10 @@ function vStudents(){
 
 function vApps(){
   const f=S.f;const q=f.aq.trim().toLowerCase();
-  const rows=S.apps.filter(a=>{const s=studentOf(a.studentId)||{};return(!q||[s.name,a.uni,a.program,a.country].join(" ").toLowerCase().includes(q))&&(!f.astat||(f.astat==="__open"?!SUBMITTED.has(a.status):a.status===f.astat))&&(!f.acur||(s.curator||"")===f.acur)})
+  const rows=S.apps.filter(a=>{const s=studentOf(a.studentId)||{};return inSchool(s)&&(!q||[s.name,a.uni,a.program,a.country].join(" ").toLowerCase().includes(q))&&(!f.astat||(f.astat==="__open"?!SUBMITTED.has(a.status):a.status===f.astat))&&(!f.acur||(s.curator||"")===f.acur)})
     .sort((a,b)=>{const pa=SUBMITTED.has(a.status)||daysLeft(a.deadline)<0?1:0,pb=SUBMITTED.has(b.status)||daysLeft(b.deadline)<0?1:0;if(pa!==pb)return pa-pb;return(a.deadline||"9999").localeCompare(b.deadline||"9999")});
   const body=rows.map(a=>{const s=studentOf(a.studentId)||{};const past=SUBMITTED.has(a.status)||daysLeft(a.deadline)<0;
-    return `<tr data-open-app="${esc(a.id)}" class="${past?"past":""}"><td><b>${esc(s.name||"—")}</b><div class="sub">${esc(s.curator||"")}</div></td><td>${esc(a.uni||"")}${a.addedBy==="student"?' <span class="chip acc" title="Студент добавил этот вуз сам в личном кабинете">от студента</span>':""}${a.studentNote?' <span class="chip" title="Есть заметка студента — откройте заявку">заметка</span>':""}<div class="sub">${esc(a.program||"")}</div></td><td>${esc(a.country||"")}</td><td>${esc(a.round||"")}</td><td class="num">${fmtDate(a.deadline)}</td><td>${dueChip(a)}</td>
+    return `<tr data-open-app="${esc(a.id)}" class="${past?"past":""}"><td><b>${esc(s.name||"—")}</b>${s.id&&schoolOf(s)!==SCHOOLS[0]?` <span class="chip warn">${esc(schoolOf(s))}</span>`:""}<div class="sub">${esc(s.curator||"")}</div></td><td>${esc(a.uni||"")}${a.addedBy==="student"?' <span class="chip acc" title="Студент добавил этот вуз сам в личном кабинете">от студента</span>':""}${a.studentNote?' <span class="chip" title="Есть заметка студента — откройте заявку">заметка</span>':""}<div class="sub">${esc(a.program||"")}</div></td><td>${esc(a.country||"")}</td><td>${esc(a.round||"")}</td><td class="num">${fmtDate(a.deadline)}</td><td>${dueChip(a)}</td>
     <td><div class="dots">${workDot(a.supp,"Доп. эссе")}</div></td><td>${progChip(s)}</td><td>${statusChip(a.status)}${a.result&&a.result!=="—"?`<div class="sub">${esc(a.result)}${a.amount?` · $${Number(a.amount).toLocaleString("ru")}`:""}</div>`:""}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-aq" placeholder="Поиск: студент, вуз, программа" value="${esc(f.aq)}">
     <select id="f-astat"><option value="">Все статусы</option><option value="__open"${f.astat==="__open"?" selected":""}>Ещё не подано</option>${opts(STATUS,f.astat==="__open"?"":f.astat,false)}</select>
@@ -454,6 +463,7 @@ function profileFields(s){return `<div class="grid">
     <label class="full">ФИО<input id="s-name" value="${esc(s.name)}"></label>
     <label>Класс / статус<input id="s-grade" value="${esc(s.grade)}" placeholder="11, гэп после 11…"></label>
     <label>Поступление<select id="s-intake">${opts(INTAKES,s.intake)}</select></label>
+    <label>Где учится<select id="s-school">${opts(SCHOOLS,schoolOf(s),false)}</select></label>
     <label>Когда поступает<select id="s-type">${opts(STYPE,s.type)}</select></label>
     <label>Тип поступления<select id="s-track">${opts(TRACKS,s.track)}</select></label>
     <label>Статус<select id="s-status">${opts(SSTATUS,s.status)}</select></label>
@@ -474,10 +484,10 @@ function profileFields(s){return `<div class="grid">
     <label>Родитель<input id="s-parent" value="${esc(s.parent)}"></label>
     <p class="full note">Заметки о студенте ведите в журнале «Встречи»; то, что пойдёт в отчёт, — во вкладке «Для отчёта».</p>
   </div>`}
-const profileData=()=>({name:val("s-name"),checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),track:val("s-track"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
+const profileData=()=>({name:val("s-name"),checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),school:val("s-school"),type:val("s-type"),track:val("s-track"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
   ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),studentEmail:val("s-semail").toLowerCase(),parent:val("s-parent"),updatedAt:new Date().toISOString()});
 function profileSheetNew(){
-  openSheet(`<h3>Новый студент</h3><fieldset class="fs"${ro()}>${profileFields({type:"В этом году",status:"Активен"})}</fieldset>${actions(true)}`,()=>{
+  openSheet(`<h3>Новый студент</h3><fieldset class="fs"${ro()}>${profileFields({type:"В этом году",status:"Активен",school:S.f.school||SCHOOLS[0]})}</fieldset>${actions(true)}`,()=>{
     $("#cancel").onclick=closeSheet;if(!S.canWrite)return;
     $("#save").onclick=async()=>{const d=profileData();if(!d.name){$("#s-name").focus();toast("Впишите ФИО");return}await save("students",null,d);closeSheet()};
   });
@@ -986,7 +996,7 @@ function dlSummary(u){const d=u.deadlines||{};return ROUNDS.filter(r=>d[r]).map(
 
 function vGrid(){
   const f=S.f;
-  const studs=S.students.filter(s=>(!f.gint||(s.intake||"Не определено")===f.gint)&&(!f.gcur||(s.curator||"")===f.gcur));
+  const studs=S.students.filter(s=>inSchool(s)&&(!f.gint||(s.intake||"Не определено")===f.gint)&&(!f.gcur||(s.curator||"")===f.gcur));
   const ids=new Set(studs.map(s=>s.id));
   const apps=S.apps.filter(a=>ids.has(a.studentId)&&(!f.gregion||regionOf(uniOf(a.uniId))===f.gregion));
   const withApps=studs.filter(s=>apps.some(a=>a.studentId===s.id)).sort((a,b)=>(a.name||"").localeCompare(b.name||"","ru"));
@@ -1165,12 +1175,14 @@ function bulkUniSheet(){
 const CUR_KEYS=["scur","acur","gcur"];
 function setMyCurator(v){CUR_KEYS.forEach(k=>S.f[k]=v);try{localStorage.setItem("gg-curator",v)}catch(e){}}
 try{const v=localStorage.getItem("gg-curator");if(v)CUR_KEYS.forEach(k=>S.f[k]=v)}catch(e){}
+try{const v=localStorage.getItem("gg-school");if(v&&SCHOOLS.includes(v))S.f.school=v}catch(e){}
 
 /* ---------- binding ---------- */
 function bindView(){
   const on=(sel,ev,fn)=>{const el=$(sel);el&&el.addEventListener(ev,fn)};
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
-  on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-upartner","click",()=>{S.f.upartner=S.f.upartner?"":"1";render()});on("#f-uedits","click",()=>{S.f.uedits=S.f.uedits?"":"1";render()});on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
+  on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));document.querySelectorAll("#main [data-school]").forEach(b=>b.onclick=()=>{S.f.school=b.dataset.school;try{localStorage.setItem("gg-school",S.f.school)}catch(e){}render()});
+  on("#f-upartner","click",()=>{S.f.upartner=S.f.upartner?"":"1";render()});on("#f-uedits","click",()=>{S.f.uedits=S.f.uedits?"":"1";render()});on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
   [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-strack","strack"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{if(CUR_KEYS.includes(k))setMyCurator(e.target.value);else S.f[k]=e.target.value;render()}));
   on("#add-student","click",()=>studentSheet());on("#auto-folders","click",()=>autoFoldersSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
@@ -1218,7 +1230,7 @@ const UNI_NULL=new Set(UNI_EXTRA.filter(x=>["int","dec","date"].includes(x[1])).
 const camel=c=>c.replace(/_([a-z])/g,(_,l)=>l.toUpperCase());
 const FIELD={communityNotes:"community_notes",createdByStudent:"created_by_student",lastStudentEditAt:"last_student_edit_at",studentEditsReviewedAt:"student_edits_reviewed_at",intlPortal:"intl_portal",studentNote:"student_note",addedBy:"added_by",uniType:"uni_type",tuitionUsdMin:"tuition_usd_min",tuitionUsdMax:"tuition_usd_max",coaUsd:"coa_usd",appFeeUsd:"app_fee_usd",costsNote:"costs_note",aidPolicy:"aid_policy",meetsNeed:"meets_need",fullRide:"full_ride",ieltsMin:"ielts_min",toeflMin:"toefl_min",duolingoMin:"duolingo_min",satPolicy:"sat_policy",entranceExam:"entrance_exam",admitRate:"admit_rate",admitRateIntl:"admit_rate_intl",feeWaiver:"fee_waiver",cssProfile:"css_profile",suppEssays:"supp_essays",aidDeadline:"aid_deadline",verifiedIntake:"verified_intake",verifiedAt:"verified_at",timeStart:"time_start",timeEnd:"time_end",classId:"class_id",studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
-  students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","track","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
+  students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","track","school","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
   unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at","student_edits_reviewed_at",...UNI_EXTRA.map(x=>x[0])],
   apps:["student_id","uni_id","program","round","deadline_override","status","tier","note","grp","sort","rating","sat_range","reqs","deadline_text","aid","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"],
   tests:["student_id","date","test","kind","sections","total","comment","created_at","updated_at"],
