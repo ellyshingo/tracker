@@ -249,6 +249,8 @@ const RESULT=["—","Полная стипендия","Частичная","Бе
 const CYCLE_YEAR=(d=>d.getMonth()>=7?d.getFullYear()+1:d.getFullYear())(new Date());
 const isThisYear=s=>String(s.intake||"").includes(String(CYCLE_YEAR));
 const TRACKS=["На грант","Партнёрские вузы"]; // «Тип поступления» (столбец track)
+// цвет «Типа поступления»: грант — зелёный, партнёрские вузы — синий (как «★ партнёр» в каталоге)
+const trackChip=t=>t?`<span class="chip ${t==="На грант"?"good":t==="Партнёрские вузы"?"acc":""}">${esc(t)}</span>`:"";
 const SCHOOLS=["Центр GetGrant","Келечек MIT","Звёздочка"]; // «Где учится» (столбец school, миграция 013)
 const schoolOf=s=>(s&&s.school)||SCHOOLS[0];
 // общий переключатель школы: пусто — все; применяется к сводке, студентам, заявкам и статусам
@@ -361,7 +363,7 @@ function vStudents(){
   const body=rows.map(s=>{const n=S.apps.filter(a=>a.studentId===s.id).length;
     const g=s.intake||"Не определено";let head="";
     if(g!==grp){grp=g;const cnt=rows.filter(x=>(x.intake||"Не определено")===g).length;head=`<tr class="grp"><td colspan="9">${esc(g)} <span class="sub">· ${cnt}</span></td></tr>`}
-    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b>${schoolOf(s)!==SCHOOLS[0]?` <span class="chip warn">${esc(schoolOf(s))}</span>`:""}<div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.track?`<div><span class="chip">${esc(s.track)}</span></div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
+    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b>${schoolOf(s)!==SCHOOLS[0]?` <span class="chip warn">${esc(schoolOf(s))}</span>`:""}<div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.track?`<div>${trackChip(s.track)}</div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
     <td class="num">${scoreCell(s,"IELTS","ielts")}${bestScore(s.id,"TOEFL")||s.toefl?`<div class="sub">TOEFL ${scoreCell(s,"TOEFL","toefl")}</div>`:""}</td><td class="num">${scoreCell(s,"SAT","sat")}</td><td class="num">${scoreCell(s,"ОРТ","ort")}</td><td class="num">${n||""}</td><td class="sub">${esc(s.countries||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-sq" placeholder="Поиск: имя, специальность, страна" value="${esc(f.sq)}">
     <select id="f-sint"><option value="">Все сезоны</option>${opts(INTAKES,f.sint,false)}</select>
