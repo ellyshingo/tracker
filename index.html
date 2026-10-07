@@ -244,7 +244,8 @@ const ST_CLS={"Планируем":"plan","Готовим":"prep","Подано"
 const STATUS=["Планируем","Готовим","Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"];
 const SUBMITTED=new Set(["Подано","Интервью","Принят","Лист ожидания","Отказ","Отозвано"]);
 const RESULT=["—","Полная стипендия","Частичная","Без стипендии"];
-const STYPE=["Курсы","Поступление","Курсы + Поступление"];
+const STYPE=["В этом году","Позже"]; // «Когда поступает» (столбец type, миграция 012)
+const TRACKS=["На грант","Партнёрские вузы"]; // «Тип поступления» (столбец track)
 const SSTATUS=["Активен","Пауза","Завершил"];
 const COURSES=["IELTS","SAT","Pre IELTS","Academic Writing","Grammar","Intensive","Pre-Intermediate","Intermediate","Upper-Intermediate","Advanced","Math","Индивидуально"];
 const INTAKES=["Осень 2027","Весна 2027","Осень 2028","Осень 2029","Осень 2030","Не определено"];
@@ -252,7 +253,7 @@ const intakeIdx=v=>{const i=INTAKES.indexOf(v||"Не определено");retu
 const DEFAULT_TEACHERS=["Aziz","Dina","Saikal","Elnur","Beksultan","Umidjon"];
 
 const S={tab:"summary",students:[],apps:[],rawApps:[],unis:[],tests:[],tasks:[],meetings:[],classes:[],members:[],me:"",mocks:[],lists:{curators:[],teachers:DEFAULT_TEACHERS},db:null,canWrite:true,ready:{students:false,apps:false,unis:false,tests:false,tasks:false,meetings:false,classes:false,members:false},
-  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",ubudget:"",uielts:"",sq:"",sint:"",stype:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
+  f:{gint:"Осень 2027",gcur:"",gregion:"",uq:"",uregion:"",ucountry:"",ubudget:"",uielts:"",sq:"",sint:"",stype:"",strack:"",scur:"",aq:"",astat:"",acur:"",mstud:""}};
 try{const t=localStorage.getItem("gg-tab");if(t&&["summary","students","apps","grid","sched","unis","settings"].includes(t))S.tab=t}catch(e){}
 
 const $=s=>document.querySelector(s);
@@ -301,14 +302,15 @@ function render(){
 
 function vSummary(){
   const st=S.students, ap=S.apps;
-  const adm=st.filter(s=>s.type&&s.type!=="Курсы");
+  const adm=st; // все студенты поступают (типа «Курсы» больше нет)
+  const thisYear=st.filter(s=>s.type==="В этом году");
   const open=ap.filter(a=>!SUBMITTED.has(a.status));
   const d7=open.filter(a=>{const d=daysLeft(a.deadline);return d!=null&&d>=0&&d<=7});
   const d21=open.filter(a=>{const d=daysLeft(a.deadline);return d!=null&&d>=0&&d<=21});
-  const noApps=adm.filter(s=>!ap.some(a=>a.studentId===s.id));
+  const noApps=thisYear.filter(s=>!ap.some(a=>a.studentId===s.id));
   const admitted=ap.filter(a=>a.status==="Принят");
   const tiles=[
-    [st.length,"студентов всего"],[adm.length,"поступают с куратором"],[ap.length,"заявок в работе и подано"],
+    [st.length,"студентов всего"],[thisYear.length,"поступают в этом году"],[ap.length,"заявок в работе и подано"],
     [d7.length,"дедлайнов ≤ 7 дней",d7.length>0],[admitted.length,"поступлений"],[admitted.filter(a=>a.result==="Полная стипендия").length,"с полной стипендией"]
   ].map(([v,l,al])=>`<div class="tile${al?" alert":""}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   const upcoming=open.filter(a=>{const d=daysLeft(a.deadline);return d!=null&&d>=0}).sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,10);
@@ -317,21 +319,21 @@ function vSummary(){
   const cur={};adm.forEach(s=>{const k=s.curator||"Без куратора";cur[k]=(cur[k]||0)+1});
   const max=Math.max(1,...Object.values(cur));
   const curHtml=Object.keys(cur).length?`<div class="bars">${Object.entries(cur).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="bar"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${v/max*100}%"></div></div><span class="c">${v}</span></div>`).join("")}</div>`
-    :`<div class="empty">Отметьте тип «Поступление» у студентов — здесь будет нагрузка по кураторам.</div>`;
+    :`<div class="empty">Назначьте студентам кураторов — здесь будет нагрузка по кураторам.</div>`;
   const byInt={};st.forEach(s=>{const k=s.intake||"Не определено";byInt[k]=(byInt[k]||0)+1});
   const imax=Math.max(1,...Object.values(byInt));
   const intHtml=st.length?`<div class="bars">${Object.entries(byInt).sort((a,b)=>intakeIdx(a[0])-intakeIdx(b[0])).map(([k,v])=>`<div class="bar" data-intake="${esc(k)}" style="cursor:pointer"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${v/imax*100}%"></div></div><span class="c">${v}</span></div>`).join("")}</div>`:`<div class="empty">Студентов пока нет.</div>`;
   const overdue=S.tasks.filter(t=>!t.done&&t.due&&daysLeft(t.due)<0).sort((a,b)=>a.due.localeCompare(b.due));
   const below=[];adm.forEach(s=>Object.entries(s.targets||{}).forEach(([t,g])=>{const b=bestScore(s.id,t);if(!b)return;const cur=num(b.total),goal=num(g);if(cur!=null&&goal!=null&&cur<goal)below.push({s,t,cur:fmtScore(t,cur),goal:fmtScore(t,goal),gap:fmtScore(t,+(goal-cur).toFixed(1))})}));below.sort((a,b)=>num(b.gap)-num(a.gap));
   const quiet=adm.filter(s=>{const m=lastMeeting(s.id);return !m||daysLeft(m.date)<-30});
-  const noAppsHtml=noApps.length?noApps.map(s=>`<div class="li" data-open-student="${esc(s.id)}"><div class="t">${esc(s.name)}<div class="sub">${esc(s.curator||"куратор не назначен")}</div></div><span class="chip warn">нет заявок</span></div>`).join(""):`<div class="empty">У всех поступающих есть заявки.</div>`;
+  const noAppsHtml=noApps.length?noApps.map(s=>`<div class="li" data-open-student="${esc(s.id)}"><div class="t">${esc(s.name)}<div class="sub">${esc(s.curator||"куратор не назначен")}</div></div><span class="chip warn">нет заявок</span></div>`).join(""):`<div class="empty">У всех, кто поступает в этом году, есть заявки.</div>`;
   return `<div class="tiles">${tiles}</div>
   <div class="cols">
     <section><h2>Ближайшие дедлайны${d21.length?` <span class="sub">· ${d21.length} в ближайшие 3 недели</span>`:""}</h2><div class="list">${upHtml}</div>
       <p class="note">Дробь — сколько общих документов студента готово (эссе, рекомендации, транскрипт и т.д.).</p></section>
     <section><h2>Студенты по сезону поступления</h2><div class="list">${intHtml}</div>
       <h2 style="margin-top:20px">Нагрузка кураторов</h2><div class="list">${curHtml}</div>
-      <h2 style="margin-top:20px">Поступающие без заявок</h2><div class="list">${noAppsHtml}</div></section>
+      <h2 style="margin-top:20px">Поступают в этом году, но нет заявок</h2><div class="list">${noAppsHtml}</div></section>
   </div>
   <div class="cols" style="margin-top:24px">
     <section><h2>Просроченные задачи${overdue.length?` <span class="sub">· ${overdue.length}</span>`:""}</h2><div class="list">${overdue.length?overdue.slice(0,12).map(t=>`<div class="li" data-open-student="${esc(t.studentId)}"><div class="t"><b>${esc(studentName(t.studentId))}</b><div class="sub">${esc(t.title.split("\n")[0].slice(0,110))}</div></div><span class="chip crit">${fmtDate(t.due)}</span></div>`).join(""):'<div class="empty">Просроченных задач нет.</div>'}</div></section>
@@ -342,17 +344,18 @@ function vSummary(){
 
 function vStudents(){
   const f=S.f;const q=f.sq.trim().toLowerCase();
-  const rows=S.students.filter(s=>(!q||[s.name,s.major,s.countries,s.notes].join(" ").toLowerCase().includes(q))&&(!f.sint||(s.intake||"Не определено")===f.sint)&&(!f.stype||s.type===f.stype)&&(!f.scur||(s.curator||"")===f.scur))
+  const rows=S.students.filter(s=>(!q||[s.name,s.major,s.countries,s.notes].join(" ").toLowerCase().includes(q))&&(!f.sint||(s.intake||"Не определено")===f.sint)&&(!f.stype||s.type===f.stype)&&(!f.strack||s.track===f.strack)&&(!f.scur||(s.curator||"")===f.scur))
     .sort((a,b)=>intakeIdx(a.intake)-intakeIdx(b.intake)||(a.name||"").localeCompare(b.name||"","ru"));
   let grp=null;
   const body=rows.map(s=>{const n=S.apps.filter(a=>a.studentId===s.id).length;
     const g=s.intake||"Не определено";let head="";
     if(g!==grp){grp=g;const cnt=rows.filter(x=>(x.intake||"Не определено")===g).length;head=`<tr class="grp"><td colspan="9">${esc(g)} <span class="sub">· ${cnt}</span></td></tr>`}
-    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b><div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type?`<div><span class="chip ${s.type==="Курсы"?"":"acc"}">${esc(s.type)}</span></div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
+    return head+`<tr data-open-student="${esc(s.id)}"><td><b>${esc(s.name)}</b><div class="sub">${esc(s.major||"")}</div></td><td>${esc(s.grade||"")}${s.type||s.track?`<div>${s.type?`<span class="chip ${s.type==="В этом году"?"acc":""}">${esc(s.type)}</span>`:""}${s.track?` <span class="chip">${esc(s.track)}</span>`:""}</div>`:""}${s.status&&s.status!=="Активен"?` <span class="chip done">${esc(s.status)}</span>`:""}</td><td>${esc(s.curator||"")}</td><td>${progChip(s)}${(()=>{const o=S.tasks.filter(t=>t.studentId===s.id&&!t.done);const late=o.filter(t=>t.due&&daysLeft(t.due)<0).length;return o.length?` <span class="chip ${late?"crit":""}" title="Открытых задач${late?", из них просрочено "+late:""}">${o.length} зад.</span>`:""})()}</td>
     <td class="num">${scoreCell(s,"IELTS","ielts")}${bestScore(s.id,"TOEFL")||s.toefl?`<div class="sub">TOEFL ${scoreCell(s,"TOEFL","toefl")}</div>`:""}</td><td class="num">${scoreCell(s,"SAT","sat")}</td><td class="num">${scoreCell(s,"ОРТ","ort")}</td><td class="num">${n||""}</td><td class="sub">${esc(s.countries||"")}</td></tr>`}).join("");
   return `<div class="toolbar"><input class="grow" id="f-sq" placeholder="Поиск: имя, специальность, страна" value="${esc(f.sq)}">
     <select id="f-sint"><option value="">Все сезоны</option>${opts(INTAKES,f.sint,false)}</select>
-    <select id="f-stype"><option value="">Все типы</option>${opts(STYPE,f.stype,false)}</select>
+    <select id="f-stype"><option value="">Когда поступает: все</option>${opts(STYPE,f.stype,false)}</select>
+    <select id="f-strack"><option value="">Грант и партнёрские</option>${opts(TRACKS,f.strack,false)}</select>
     <select id="f-scur"><option value="">Все кураторы</option>${opts(S.lists.curators,f.scur,false)}</select>
     ${S.canWrite?'<button class="btn" id="auto-folders" title="Найти папки студентов на Google Диске по имени и привязать">Папки на Диске</button><button class="btn primary" id="add-student">+ Студент</button>':""}</div>
     <div class="tablebox">${S.students.length?`<table><thead><tr><th>Студент</th><th>Класс / тип</th><th>Куратор</th><th>Документы</th><th class="num">IELTS</th><th class="num">SAT</th><th class="num">ОРТ</th><th class="num">Заявок</th><th>Страны</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="empty">Никто не подходит под фильтр.</td></tr>'}</tbody></table>`
@@ -451,7 +454,8 @@ function profileFields(s){return `<div class="grid">
     <label class="full">ФИО<input id="s-name" value="${esc(s.name)}"></label>
     <label>Класс / статус<input id="s-grade" value="${esc(s.grade)}" placeholder="11, гэп после 11…"></label>
     <label>Поступление<select id="s-intake">${opts(INTAKES,s.intake)}</select></label>
-    <label>Тип<select id="s-type">${opts(STYPE,s.type)}</select></label>
+    <label>Когда поступает<select id="s-type">${opts(STYPE,s.type)}</select></label>
+    <label>Тип поступления<select id="s-track">${opts(TRACKS,s.track)}</select></label>
     <label>Статус<select id="s-status">${opts(SSTATUS,s.status)}</select></label>
     <label>Куратор<select id="s-curator">${opts(S.lists.curators,s.curator)}</select></label>
     <label>Год выпуска школы<input id="s-grad" inputmode="numeric" value="${esc(s.gradYear)}"></label>
@@ -470,10 +474,10 @@ function profileFields(s){return `<div class="grid">
     <label>Родитель<input id="s-parent" value="${esc(s.parent)}"></label>
     <p class="full note">Заметки о студенте ведите в журнале «Встречи»; то, что пойдёт в отчёт, — во вкладке «Для отчёта».</p>
   </div>`}
-const profileData=()=>({name:val("s-name"),checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
+const profileData=()=>({name:val("s-name"),checklist:Object.fromEntries(CHECK.map(([k])=>[k,val("c-"+k)])),grade:val("s-grade"),intake:val("s-intake"),type:val("s-type"),track:val("s-track"),status:val("s-status"),curator:val("s-curator"),gradYear:val("s-grad"),major:val("s-major"),countries:val("s-countries"),
   ielts:val("s-ielts"),toefl:val("s-toefl"),sat:val("s-sat"),ort:val("s-ort"),gpa:val("s-gpa"),contact:val("s-contact"),studentEmail:val("s-semail").toLowerCase(),parent:val("s-parent"),updatedAt:new Date().toISOString()});
 function profileSheetNew(){
-  openSheet(`<h3>Новый студент</h3><fieldset class="fs"${ro()}>${profileFields({type:"Поступление",status:"Активен"})}</fieldset>${actions(true)}`,()=>{
+  openSheet(`<h3>Новый студент</h3><fieldset class="fs"${ro()}>${profileFields({type:"В этом году",status:"Активен"})}</fieldset>${actions(true)}`,()=>{
     $("#cancel").onclick=closeSheet;if(!S.canWrite)return;
     $("#save").onclick=async()=>{const d=profileData();if(!d.name){$("#s-name").focus();toast("Впишите ФИО");return}await save("students",null,d);closeSheet()};
   });
@@ -1167,7 +1171,7 @@ function bindView(){
   const on=(sel,ev,fn)=>{const el=$(sel);el&&el.addEventListener(ev,fn)};
   let t;const deb=(k,v)=>{clearTimeout(t);t=setTimeout(()=>{S.f[k]=v;const pos=document.activeElement&&document.activeElement.id;render();if(pos){const el=document.getElementById(pos);if(el){el.focus();try{el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}},200)};
   on("#f-sq","input",e=>deb("sq",e.target.value));on("#f-uq","input",e=>deb("uq",e.target.value));on("#f-upartner","click",()=>{S.f.upartner=S.f.upartner?"":"1";render()});on("#f-uedits","click",()=>{S.f.uedits=S.f.uedits?"":"1";render()});on("#f-ubudget","input",e=>deb("ubudget",e.target.value));on("#f-uielts","input",e=>deb("uielts",e.target.value));on("#f-aq","input",e=>deb("aq",e.target.value));
-  [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{if(CUR_KEYS.includes(k))setMyCurator(e.target.value);else S.f[k]=e.target.value;render()}));
+  [["#f-gint","gint"],["#f-gcur","gcur"],["#f-gregion","gregion"],["#f-uregion","uregion"],["#f-ucountry","ucountry"],["#f-sint","sint"],["#f-stype","stype"],["#f-strack","strack"],["#f-scur","scur"],["#f-astat","astat"],["#f-acur","acur"]].forEach(([s,k])=>on(s,"change",e=>{if(CUR_KEYS.includes(k))setMyCurator(e.target.value);else S.f[k]=e.target.value;render()}));
   on("#add-student","click",()=>studentSheet());on("#auto-folders","click",()=>autoFoldersSheet());on("#add-app","click",()=>pickUnis());on("#add-uni","click",()=>uniSheet());on("#bulk-uni","click",()=>bulkUniSheet());
   document.querySelectorAll("#main [data-intake]").forEach(el=>el.addEventListener("click",()=>{S.f.sint=el.dataset.intake;S.tab="students";render()}));
   document.querySelectorAll("#main [data-open-student]").forEach(el=>el.addEventListener("click",e=>{e.preventDefault();studentSheet(el.dataset.openStudent)}));
@@ -1214,7 +1218,7 @@ const UNI_NULL=new Set(UNI_EXTRA.filter(x=>["int","dec","date"].includes(x[1])).
 const camel=c=>c.replace(/_([a-z])/g,(_,l)=>l.toUpperCase());
 const FIELD={communityNotes:"community_notes",createdByStudent:"created_by_student",lastStudentEditAt:"last_student_edit_at",studentEditsReviewedAt:"student_edits_reviewed_at",intlPortal:"intl_portal",studentNote:"student_note",addedBy:"added_by",uniType:"uni_type",tuitionUsdMin:"tuition_usd_min",tuitionUsdMax:"tuition_usd_max",coaUsd:"coa_usd",appFeeUsd:"app_fee_usd",costsNote:"costs_note",aidPolicy:"aid_policy",meetsNeed:"meets_need",fullRide:"full_ride",ieltsMin:"ielts_min",toeflMin:"toefl_min",duolingoMin:"duolingo_min",satPolicy:"sat_policy",entranceExam:"entrance_exam",admitRate:"admit_rate",admitRateIntl:"admit_rate_intl",feeWaiver:"fee_waiver",cssProfile:"css_profile",suppEssays:"supp_essays",aidDeadline:"aid_deadline",verifiedIntake:"verified_intake",verifiedAt:"verified_at",timeStart:"time_start",timeEnd:"time_end",classId:"class_id",studentEmail:"student_email",satRange:"sat_range",reportOpts:"report_opts",groupNotes:"group_notes",doneList:"done_list",curatorNotes:"curator_notes",unisNote:"unis_note",tierTitles:"tier_titles",deadlineText:"deadline_text",nextSteps:"next_steps",gradYear:"grad_year",studentId:"student_id",uniId:"uni_id",deadlineOverride:"deadline_override",createdAt:"created_at",updatedAt:"updated_at"};
 const COLS={
-  students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
+  students:["name","student_email","checklist","report_opts","group_notes","metrics","targets","tier_titles","strategy","done_list","strengths","weaknesses","curator_notes","unis_note","grade","intake","type","track","status","curator","grad_year","major","countries","ielts","toefl","sat","ort","gpa","contact","parent","notes","created_at","updated_at"],
   unis:["name","country","link","rating","aid","deadline_text","deadlines","reqs","notes","created_at","updated_at","student_edits_reviewed_at",...UNI_EXTRA.map(x=>x[0])],
   apps:["student_id","uni_id","program","round","deadline_override","status","tier","note","grp","sort","rating","sat_range","reqs","deadline_text","aid","essay","supp","recs","docs","scores","result","amount","notes","created_at","updated_at"],
   tests:["student_id","date","test","kind","sections","total","comment","created_at","updated_at"],
